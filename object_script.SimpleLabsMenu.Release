@@ -1,0 +1,12 @@
+INPUT(
+./release\main.o
+./release\mainwindow.o
+./release\batterywidget.o
+./release\batteryworker.o
+./release\jakewidget.o
+./release\qrc_resources.o
+./release\moc_mainwindow.o
+./release\moc_batterywidget.o
+./release\moc_batteryworker.o
+./release\moc_jakewidget.o
+);

@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/assets">
+        <file>assets/jake_base.gif</file>
+    </qresource>
+</RCC>
+
