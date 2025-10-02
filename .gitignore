@@ -1,0 +1,101 @@
+# Qt generated files
+*.pro.user
+*.pro.user.*
+*.qws
+*.tmp
+*.temp
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.autosave
+
+# Build directories
+build/
+build-*/
+debug/
+release/
+Debug/
+Release/
+
+# Makefiles
+Makefile*
+!*.pro
+
+# Object files
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
+# Executables
+*.exe
+*.app
+*.dSYM
+
+# Qt Creator files
+*.creator
+*.creator.user
+*.files
+*.includes
+*.config
+*.cflags
+*.cxxflags
+
+# VS Code settings
+.vscode/
+*.code-workspace
+
+# PowerShell scripts
+*.ps1
+
+# Temporary files
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Qt Resource compiled files
+qrc_*.cpp
+
+# Qt MOC files
+moc_*.cpp
+moc_*.h
+
+# Qt UI files (generated)
+ui_*.h
+
+# CMake (if used)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.cmake
+
+# Other build systems
+*.make
+*.ninja
+*.vcxproj*
+*.sln
+*.suo
+*.ncb
+*.aps
+*.plg
+*.opt
+*.clw
+
+# Logs
+*.log
+
+# IDE specific
+.idea/
+*.cbp
+*.layout
+*.depend
+
+# Backup files
+*.bak
+*.orig
