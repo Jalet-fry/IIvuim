@@ -11,15 +11,25 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 TARGET = SimpleLabsMenu
 TEMPLATE = app
 
-#SOURCES += main.cpp \
-#    mainwindow.cpp
-
-HEADERS += mainwindow.h
-# Добавьте эти строки, если их нет
-SOURCES += $$files(*.cpp, true)
-HEADERS += $$files(*.h, true)
-FORMS += $$files(*.ui, true)
-RESOURCES += $$files(*.qrc, true)
-
-# Для совместимости с Qt 5.5.1
 CONFIG += c++11
+
+SOURCES += \
+    main.cpp \
+    mainwindow.cpp \
+    batterywidget.cpp \
+    batteryworker.cpp \
+    jakewidget.cpp
+
+HEADERS += \
+    mainwindow.h \
+    batterywidget.h \
+    batteryworker.h \
+    jakewidget.h
+
+FORMS += \
+    mainwindow.ui
+
+RESOURCES += \
+    resources.qrc
+
+win32: LIBS += -luser32 -lpowrprof -ladvapi32
