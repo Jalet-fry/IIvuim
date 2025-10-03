@@ -3,12 +3,19 @@
 
 #include <QMainWindow>
 
+class BatteryWidget;
+class JakeWidget;
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
     MainWindow(QWidget *parent = 0);
+    ~MainWindow();
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override;
 
 private slots:
     void openLab1();
@@ -17,6 +24,11 @@ private slots:
     void openLab4();
     void openLab5();
     void openLab6();
+
+private:
+    BatteryWidget *batteryWidget;
+    JakeWidget *jakeWidget;
+    void setupJake();
 };
 
 #endif // MAINWINDOW_H

@@ -1,14 +1,17 @@
 #include "mainwindow.h"
 #include "batterywidget.h"
+#include "jakewidget.h"
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QWidget>
 #include <QLabel>
 #include <QMessageBox>
+#include <QEvent>
+#include <QHoverEvent>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
+    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr)
 {
     setWindowTitle("Лабораторные работы");
     setFixedSize(1200, 700);
@@ -56,6 +59,9 @@ MainWindow::MainWindow(QWidget *parent)
         );
         leftLayout->addWidget(button);
 
+        // Устанавливаем фильтр событий для кнопок
+        button->installEventFilter(this);
+
         if (i == 1) connect(button, SIGNAL(clicked()), this, SLOT(openLab1()));
         if (i == 2) connect(button, SIGNAL(clicked()), this, SLOT(openLab2()));
         if (i == 3) connect(button, SIGNAL(clicked()), this, SLOT(openLab3()));
@@ -85,6 +91,9 @@ MainWindow::MainWindow(QWidget *parent)
         );
         rightLayout->addWidget(button);
 
+        // Устанавливаем фильтр событий для кнопок
+        button->installEventFilter(this);
+
         if (i == 4) connect(button, SIGNAL(clicked()), this, SLOT(openLab4()));
         if (i == 5) connect(button, SIGNAL(clicked()), this, SLOT(openLab5()));
         if (i == 6) connect(button, SIGNAL(clicked()), this, SLOT(openLab6()));
@@ -99,29 +108,87 @@ MainWindow::MainWindow(QWidget *parent)
     mainLayout->addStretch();
     mainLayout->addLayout(buttonsLayout);
     mainLayout->addStretch();
+
+    // Создаем Джейка после инициализации UI
+    setupJake();
+}
+
+MainWindow::~MainWindow()
+{
+    if (batteryWidget) {
+        batteryWidget->close();
+        delete batteryWidget;
+    }
+    if (jakeWidget) {
+        jakeWidget->close();
+        delete jakeWidget;
+    }
+}
+
+void MainWindow::setupJake()
+{
+    jakeWidget = new JakeWidget();
+    jakeWidget->resize(200, 160);
+    jakeWidget->show();
+    
+    // Устанавливаем начальную позицию Джейка
+    QPoint globalCursorPos = QCursor::pos();
+    jakeWidget->move(globalCursorPos.x() - jakeWidget->width()/2, 
+                     globalCursorPos.y() - jakeWidget->height()/2);
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if (jakeWidget) {
+        if (event->type() == QEvent::HoverEnter) {
+            jakeWidget->onButtonHover();
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            jakeWidget->onButtonClick();
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
 }
 
 void MainWindow::openLab1() {
     BatteryWidget *batteryWindow = new BatteryWidget(nullptr);
     batteryWindow->showAndStart();
+    
+    if (jakeWidget) {
+        jakeWidget->onButtonClick();
+    }
 }
 
 void MainWindow::openLab2() {
     QMessageBox::information(this, "ЛР 2", "Открываем лабораторную работу 2");
+    if (jakeWidget) {
+        jakeWidget->onButtonClick();
+    }
 }
 
 void MainWindow::openLab3() {
     QMessageBox::information(this, "ЛР 3", "Открываем лабораторную работу 3");
+    if (jakeWidget) {
+        jakeWidget->onButtonClick();
+    }
 }
 
 void MainWindow::openLab4() {
     QMessageBox::information(this, "ЛР 4", "Открываем лабораторную работу 4");
+    if (jakeWidget) {
+        jakeWidget->onButtonClick();
+    }
 }
 
 void MainWindow::openLab5() {
     QMessageBox::information(this, "ЛР 5", "Открываем лабораторную работу 5");
+    if (jakeWidget) {
+        jakeWidget->onButtonClick();
+    }
 }
 
 void MainWindow::openLab6() {
     QMessageBox::information(this, "ЛР 6", "Открываем лабораторную работу 6");
+    if (jakeWidget) {
+        jakeWidget->onButtonClick();
+    }
 }
