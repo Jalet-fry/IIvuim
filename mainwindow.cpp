@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "batterywidget.h"
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -9,47 +10,41 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    // УВЕЛИЧИВАЕМ РАЗМЕР ОКНА
     setWindowTitle("Лабораторные работы");
-    setFixedSize(1200, 700); // БОЛЬШЕ чем было!
+    setFixedSize(1200, 700);
 
-    // Центральный виджет
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
 
-    // Главный layout - вертикальный
     QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
 
-    // Заголовок
     QLabel *titleLabel = new QLabel("Лабораторные работы", this);
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setStyleSheet(
         "QLabel {"
-        "    font-size: 32px;"  // УВЕЛИЧИЛИ ШРИФТ
+        "    font-size: 32px;"
         "    font-weight: bold;"
         "    color: #2E7D32;"
-        "    padding: 20px;"    // УВЕЛИЧИЛИ ОТСТУПЫ
+        "    padding: 20px;"
         "}"
     );
     mainLayout->addWidget(titleLabel);
 
-    // Горизонтальный layout для кнопок
     QHBoxLayout *buttonsLayout = new QHBoxLayout();
 
-    // ЛЕВАЯ КОЛОНКА (3 кнопки)
     QVBoxLayout *leftLayout = new QVBoxLayout();
-    leftLayout->setSpacing(30); // БОЛЬШЕ расстояния между кнопками
+    leftLayout->setSpacing(30);
 
     for (int i = 1; i <= 3; ++i) {
-        QPushButton *button = new QPushButton(QString("ЛР %1").arg(i), this); // СОКРАТИЛИ НАДПИСЬ
-        button->setFixedSize(250, 80); // УВЕЛИЧИЛИ КНОПКИ
+        QPushButton *button = new QPushButton(QString("ЛР %1").arg(i), this);
+        button->setFixedSize(250, 80);
         button->setStyleSheet(
             "QPushButton {"
             "    background-color: #2196F3;"
             "    color: white;"
             "    border: none;"
-            "    border-radius: 12px;"  // УВЕЛИЧИЛИ ЗАКРУГЛЕНИЯ
-            "    font-size: 18px;"      // УВЕЛИЧИЛИ ШРИФТ
+            "    border-radius: 12px;"
+            "    font-size: 18px;"
             "    font-weight: bold;"
             "}"
             "QPushButton:hover {"
@@ -61,26 +56,24 @@ MainWindow::MainWindow(QWidget *parent)
         );
         leftLayout->addWidget(button);
 
-        // Подключаем кнопки
         if (i == 1) connect(button, SIGNAL(clicked()), this, SLOT(openLab1()));
         if (i == 2) connect(button, SIGNAL(clicked()), this, SLOT(openLab2()));
         if (i == 3) connect(button, SIGNAL(clicked()), this, SLOT(openLab3()));
     }
 
-    // ПРАВАЯ КОЛОНКА (3 кнопки)
     QVBoxLayout *rightLayout = new QVBoxLayout();
     rightLayout->setSpacing(30);
 
     for (int i = 4; i <= 6; ++i) {
-        QPushButton *button = new QPushButton(QString("ЛР %1").arg(i), this); // СОКРАТИЛИ НАДПИСЬ
-        button->setFixedSize(250, 80); // УВЕЛИЧИЛИ КНОПКИ
+        QPushButton *button = new QPushButton(QString("ЛР %1").arg(i), this);
+        button->setFixedSize(250, 80);
         button->setStyleSheet(
             "QPushButton {"
             "    background-color: #FF9800;"
             "    color: white;"
             "    border: none;"
             "    border-radius: 12px;"
-            "    font-size: 18px;"  // УВЕЛИЧИЛИ ШРИФТ
+            "    font-size: 18px;"
             "    font-weight: bold;"
             "}"
             "QPushButton:hover {"
@@ -92,27 +85,25 @@ MainWindow::MainWindow(QWidget *parent)
         );
         rightLayout->addWidget(button);
 
-        // Подключаем кнопки
         if (i == 4) connect(button, SIGNAL(clicked()), this, SLOT(openLab4()));
         if (i == 5) connect(button, SIGNAL(clicked()), this, SLOT(openLab5()));
         if (i == 6) connect(button, SIGNAL(clicked()), this, SLOT(openLab6()));
     }
 
-    // Добавляем колонки в горизонтальный layout
     buttonsLayout->addStretch();
     buttonsLayout->addLayout(leftLayout);
-    buttonsLayout->addSpacing(100); // БОЛЬШЕ расстояния между колонками
+    buttonsLayout->addSpacing(100);
     buttonsLayout->addLayout(rightLayout);
     buttonsLayout->addStretch();
 
-    // Добавляем все в главный layout
     mainLayout->addStretch();
     mainLayout->addLayout(buttonsLayout);
     mainLayout->addStretch();
 }
 
 void MainWindow::openLab1() {
-    QMessageBox::information(this, "ЛР 1", "Открываем лабораторную работу 1");
+    BatteryWidget *batteryWindow = new BatteryWidget(nullptr);
+    batteryWindow->showAndStart();
 }
 
 void MainWindow::openLab2() {

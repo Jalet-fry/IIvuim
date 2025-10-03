@@ -19,13 +19,16 @@ public:
     void stopWorker();
     ~BatteryWidget();
 
+    // Метод для показа окна с запуском мониторинга
+    void showAndStart();
+
 public slots:
     void onBatteryInfoUpdated(const QString &powerType, const QString &batteryChemistry,
                              int chargeLevel, const QString &powerSaveMode,
                              int batteryLifeTime, int batteryFullLifeTime);
 
 private slots:
-    void onDisplayOffClicked();  // Переименовали - только выключение дисплея
+    void onDisplayOffClicked();
     void onHibernateClicked();
 
 protected:
@@ -40,7 +43,7 @@ private:
     QLabel *powerSaveLabel;
     QLabel *batteryLifeLabel;
     QLabel *batteryFullLifeLabel;
-    QPushButton *displayOffButton;  // Переименовали
+    QPushButton *displayOffButton;
     QPushButton *hibernateButton;
 
     BatteryWorker *batteryWorker;

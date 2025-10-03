@@ -16,12 +16,23 @@ BatteryWidget::BatteryWidget(QWidget *parent) : QWidget(parent)
     batteryWorker = new BatteryWorker(this);
     connect(batteryWorker, &BatteryWorker::batteryInfoUpdated,
             this, &BatteryWidget::onBatteryInfoUpdated);
+    
+    // Устанавливаем свойства окна
+    setWindowTitle("Лабораторная работа 1 - Информация о батарее");
+    setFixedSize(500, 400);
 }
 
 BatteryWidget::~BatteryWidget()
 {
     stopWorker();
-    delete batteryWorker;
+}
+
+void BatteryWidget::showAndStart()
+{
+    startWorker(); // Запускаем мониторинг
+    show();        // Показываем окно
+    raise();       // Поднимаем на передний план
+    activateWindow(); // Активируем окно
 }
 
 void BatteryWidget::closeEvent(QCloseEvent* event) {
@@ -70,7 +81,6 @@ void BatteryWidget::setupUI()
 
     layout->addWidget(infoGroup, 0, 0, 1, 2);
 
-    // ИЗМЕНЕНИЕ: только выключение дисплея вместо сна
     displayOffButton = new QPushButton("Выключить экран");
     hibernateButton = new QPushButton("Гибернация");
     displayOffButton->setStyleSheet("QPushButton { background-color: #f0ad4e; color: white; padding: 5px; }");
@@ -120,7 +130,6 @@ void BatteryWidget::onDisplayOffClicked()
     qDebug() << "Выключение экрана";
 
 #ifdef Q_OS_WIN
-    // ТОЛЬКО выключение дисплея - безопасная операция
     SendMessage(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, (LPARAM) 2);
     QMessageBox::information(this, "Экран", "Экран выключен. Нажмите любую клавишу или пошевелите мышкой для включения.");
 #else
@@ -139,7 +148,6 @@ void BatteryWidget::onHibernateClicked()
     
     if (ret == QMessageBox::Yes) {
 #ifdef Q_OS_WIN
-        // Включаем привилегию для выключения системы
         HANDLE hToken;
         TOKEN_PRIVILEGES tp;
         LUID luid;
@@ -153,7 +161,6 @@ void BatteryWidget::onHibernateClicked()
                 AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr);
                 
                 if (GetLastError() == ERROR_SUCCESS) {
-                    // Переводим в гибернацию
                     SetSuspendState(TRUE, TRUE, FALSE);
                 } else {
                     QMessageBox::warning(this, "Ошибка", "Не удалось получить права для гибернации");
