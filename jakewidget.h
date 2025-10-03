@@ -84,10 +84,7 @@ private:
     qreal easeOutElastic(qreal t);
     qreal easeOutBounce(qreal t);
 
-    // Helpers for drawing
-    void drawJakeLab1(QPainter &p, const QRectF &r);
-    void drawJakeFollowMouse(QPainter &p, const QRectF &r);
-    void drawJakeExcited(QPainter &p, const QRectF &r);
+    // Helpers for drawing (removed - now using GIF only)
     QPointF calculateArmPosition(const QPointF& shoulder, const QPointF& target, qreal armLength);
 };
 
