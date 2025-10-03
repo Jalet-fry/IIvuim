@@ -99,3 +99,5 @@ cmake_install.cmake
 # Backup files
 *.bak
 *.orig
+
+*.txt
