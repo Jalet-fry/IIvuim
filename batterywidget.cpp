@@ -1,5 +1,4 @@
 #include "batterywidget.h"
-#include "batteryworker.h"
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QDebug>
@@ -7,7 +6,6 @@
 
 #ifdef Q_OS_WIN
     #include <windows.h>
-    #include <powrprof.h>
 #endif
 
 BatteryWidget::BatteryWidget(QWidget *parent) : QWidget(parent)
@@ -93,33 +91,31 @@ void BatteryWidget::setupUI()
     connect(hibernateButton, &QPushButton::clicked, this, &BatteryWidget::onHibernateClicked);
 }
 
-void BatteryWidget::onBatteryInfoUpdated(const QString &powerType, const QString &batteryChemistry,
-                                        int chargeLevel, const QString &powerSaveMode,
-                                        int batteryLifeTime, int batteryFullLifeTime)
+void BatteryWidget::onBatteryInfoUpdated(const BatteryWorker::BatteryInfo &info)
 {
-    powerTypeLabel->setText(powerType);
-    batteryChemistryLabel->setText(batteryChemistry);
-    chargeLevelBar->setValue(chargeLevel);
-    powerSaveLabel->setText(powerSaveMode);
+    powerTypeLabel->setText(info.powerType);
+    batteryChemistryLabel->setText(info.batteryChemistry);
+    chargeLevelBar->setValue(info.chargeLevel);
+    powerSaveLabel->setText(info.powerSaveMode);
 
-    if(powerType == "AC supply") {
+    if(info.powerType == "AC supply") {
         batteryLifeLabel->setText("Не применимо (питание от сети)");
         batteryFullLifeLabel->setText("Не применимо (питание от сети)");
         return;
     } else {
-        if (batteryLifeTime == -1) {
+        if (info.batteryLifeTime == -1) {
             batteryLifeLabel->setText("Вычисляется...");
         } else {
-            int hours = batteryLifeTime / 3600;
-            int minutes = (batteryLifeTime % 3600) / 60;
+            int hours = info.batteryLifeTime / 3600;
+            int minutes = (info.batteryLifeTime % 3600) / 60;
             batteryLifeLabel->setText(QString("%1 ч %2 м").arg(hours).arg(minutes));
         }
 
-        if (batteryFullLifeTime == -1) {
+        if (info.batteryFullLifeTime == -1) {
             batteryFullLifeLabel->setText("Вычисляется...");
         } else {
-            int hours = batteryFullLifeTime / 3600;
-            int minutes = (batteryFullLifeTime % 3600) / 60;
+            int hours = info.batteryFullLifeTime / 3600;
+            int minutes = (info.batteryFullLifeTime % 3600) / 60;
             batteryFullLifeLabel->setText(QString("%1 ч %2 м").arg(hours).arg(minutes));
         }
     }

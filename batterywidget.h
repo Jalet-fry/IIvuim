@@ -6,8 +6,7 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QCloseEvent>
-
-class BatteryWorker;
+#include "batteryworker.h"
 
 class BatteryWidget : public QWidget
 {
@@ -23,9 +22,7 @@ public:
     void showAndStart();
 
 public slots:
-    void onBatteryInfoUpdated(const QString &powerType, const QString &batteryChemistry,
-                             int chargeLevel, const QString &powerSaveMode,
-                             int batteryLifeTime, int batteryFullLifeTime);
+    void onBatteryInfoUpdated(const BatteryWorker::BatteryInfo &info);
 
 private slots:
     void onDisplayOffClicked();

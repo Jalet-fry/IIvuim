@@ -1,86 +1,7 @@
 #include "batteryworker.h"
 #include <QDebug>
 #include <QString>
-
-#ifdef Q_OS_WIN
-    #include <windows.h>
-    #include <iostream>
-    
-    // Интегрированные классы из вашего кода
-    class BatteryInfo {
-    public:
-        std::string powerType;
-        std::string batteryChemistry;
-        int chargeLevel;
-        std::string powerSaveMode;
-        int batteryLifeTime;      // Оставшееся время работы в секундах
-        int batteryFullLifeTime;  // Полное время работы от полного заряда в секундах
-    };
-    
-    class BatteryManager {
-    private:
-        SYSTEM_POWER_STATUS powerStatus;
-    
-    public:
-        BatteryInfo getBatteryInfo() {
-            BatteryInfo info;
-            
-            if (GetSystemPowerStatus(&powerStatus)) {
-                // Тип питания
-                if (powerStatus.ACLineStatus == 1) {
-                    info.powerType = "AC supply";
-                } else if (powerStatus.ACLineStatus == 0) {
-                    info.powerType = "Battery";
-                } else {
-                    info.powerType = "Unknown";
-                }
-
-                // Уровень заряда
-                info.chargeLevel = powerStatus.BatteryLifePercent;
-                if (info.chargeLevel == 255) info.chargeLevel = 0;
-
-                // Химический состав батареи
-                switch (powerStatus.BatteryFlag) {
-                    case 1: info.batteryChemistry = "High"; break;
-                    case 2: info.batteryChemistry = "Low"; break;
-                    case 4: info.batteryChemistry = "Critical"; break;
-                    case 8: info.batteryChemistry = "Charging"; break;
-                    default: info.batteryChemistry = "Unknown";
-                }
-
-                // Режим энергосбережения
-                info.powerSaveMode = (powerStatus.BatteryFlag & 8) ? "On" : "Off";
-
-                // Расчет времени работы батареи
-                if (powerStatus.ACLineStatus == 0) { // На батарее
-                    // Оставшееся время работы
-                    info.batteryLifeTime = powerStatus.BatteryLifeTime;
-                    if (info.batteryLifeTime == -1) {
-                        info.batteryLifeTime = -1; // Расчет недоступен
-                    }
-
-                    // Расчет полного времени работы от полного заряда
-                    if (info.chargeLevel > 0 && info.batteryLifeTime != -1) {
-                        // Формула: (текущее_время * 100) / уровень_заряда
-                        info.batteryFullLifeTime = (info.batteryLifeTime * 100) / info.chargeLevel;
-                    } else {
-                        info.batteryFullLifeTime = -1;
-                    }
-                } else {
-                    // На питании от сети
-                    info.batteryLifeTime = -1;
-                    info.batteryFullLifeTime = -1;
-                }
-            }
-            
-            return info;
-        }
-    };
-    
-    // Глобальный экземпляр менеджера батареи
-    static BatteryManager batteryManager;
-    
-#endif
+#include <vector>
 
 BatteryWorker::BatteryWorker(QObject *parent) : QObject(parent)
 {
@@ -95,8 +16,8 @@ BatteryWorker::~BatteryWorker()
 
 void BatteryWorker::startMonitoring()
 {
-    updateBatteryInfo(); // Немедленное обновление при запуске
-    timer->start(3000); // Обновление каждые 3 секунды
+    updateBatteryInfo();
+    timer->start(3000);
     qDebug() << "Battery monitoring started";
 }
 
@@ -110,21 +31,164 @@ void BatteryWorker::stopMonitoring()
 
 void BatteryWorker::updateBatteryInfo()
 {
-    qDebug() << "Обновление информации о батарее...";
+    qDebug() << "BATTERY WORKER: I AM WORKING";
+    getBatteryInfo();
+    emit batteryInfoUpdated(batteryInfo);
+}
 
-#ifdef Q_OS_WIN
-    // Используем интегрированный BatteryManager
-    BatteryInfo info = batteryManager.getBatteryInfo();
-    
-    // Конвертируем std::string в QString
-    QString powerType = QString::fromStdString(info.powerType);
-    QString batteryChemistry = QString::fromStdString(info.batteryChemistry);
-    QString powerSaveMode = QString::fromStdString(info.powerSaveMode);
-    
-    emit batteryInfoUpdated(powerType, batteryChemistry, info.chargeLevel, 
-                           powerSaveMode, info.batteryLifeTime, info.batteryFullLifeTime);
-#else
-    // Заглушка для других ОС
-    emit batteryInfoUpdated("Unknown", "Unknown", 0, "Off", -1, -1);
-#endif
+void BatteryWorker::getBatteryInfo()
+{
+    SYSTEM_POWER_STATUS status;
+
+    if (GetSystemPowerStatus(&status)) {
+
+        switch (status.ACLineStatus) {
+        case 0:
+            batteryInfo.powerType = "Battery";
+            break;
+        case 1:
+            batteryInfo.powerType = "AC supply";
+            break;
+        default: batteryInfo.powerType = "Unknown"; break;
+        }
+
+        batteryInfo.chargeLevel = (status.BatteryLifePercent == 255) ?
+            -1 : status.BatteryLifePercent;
+
+        batteryInfo.batteryChemistry = getBatteryChemistry();
+
+        batteryInfo.powerSaveMode = getPowerSaveMode();
+
+        if (status.ACLineStatus == 1 || status.BatteryLifeTime == 0xFFFFFFFF) {
+            batteryInfo.batteryLifeTime = -1;
+        } else {
+            batteryInfo.batteryLifeTime = status.BatteryLifeTime;
+        }
+
+        if (status.ACLineStatus == 1 || status.BatteryLifeTime == 0xFFFFFFFF) {
+            batteryInfo.batteryFullLifeTime = -1;
+        } else {
+            batteryInfo.batteryFullLifeTime = static_cast<qint64>((100.0/status.BatteryLifePercent)*status.BatteryLifeTime);
+        }
+
+    } else {
+        qDebug() << "ERROR: retreiving system power status failed:" << GetLastError();
+    }
+}
+
+QString BatteryWorker::getBatteryChemistry()
+{
+    HDEVINFO hdev = SetupDiGetClassDevs(&GUID_DEVICE_BATTERY, 0, 0,
+                                       DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (hdev == INVALID_HANDLE_VALUE) {
+        qDebug() << "SetupDiGetClassDevs failed:" << GetLastError();
+        return "Unknown";
+    }
+
+    SP_DEVICE_INTERFACE_DATA did = { sizeof(SP_DEVICE_INTERFACE_DATA) };
+    if (!SetupDiEnumDeviceInterfaces(hdev, 0, &GUID_DEVICE_BATTERY, 0, &did)) {
+        SetupDiDestroyDeviceInfoList(hdev);
+        qDebug() << "SetupDiEnumDeviceInterfaces failed:" << GetLastError();
+        return "Unknown";
+    }
+
+    DWORD needed = 0;
+    SetupDiGetDeviceInterfaceDetail(hdev, &did, 0, 0, &needed, 0);
+
+    if (GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
+        SetupDiDestroyDeviceInfoList(hdev);
+        qDebug() << "SetupDiGetDeviceInterfaceDetail size failed:" << GetLastError();
+        return "Unknown";
+    }
+
+    std::vector<BYTE> buffer(needed);
+    PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd =
+        (PSP_DEVICE_INTERFACE_DETAIL_DATA)&buffer[0];
+    pdidd->cbSize = sizeof(*pdidd);
+
+    if (!SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, needed, 0, 0)) {
+        SetupDiDestroyDeviceInfoList(hdev);
+        qDebug() << "SetupDiGetDeviceInterfaceDetail failed:" << GetLastError();
+        return "Unknown";
+    }
+
+    HANDLE hBattery = CreateFile(pdidd->DevicePath, GENERIC_READ | GENERIC_WRITE,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (hBattery == INVALID_HANDLE_VALUE) {
+        SetupDiDestroyDeviceInfoList(hdev);
+        qDebug() << "CreateFile failed:" << GetLastError();
+        return "Unknown";
+    }
+
+    BATTERY_QUERY_INFORMATION bqi = {0};
+    DWORD dwWait = 0;
+    DWORD dwOut;
+
+    if (!DeviceIoControl(hBattery, IOCTL_BATTERY_QUERY_TAG,
+                        &dwWait, sizeof(dwWait),
+                        &bqi.BatteryTag, sizeof(bqi.BatteryTag),
+                        &dwOut, NULL) || !bqi.BatteryTag) {
+        CloseHandle(hBattery);
+        SetupDiDestroyDeviceInfoList(hdev);
+        qDebug() << "IOCTL_BATTERY_QUERY_TAG failed:" << GetLastError();
+        return "Неизвестно";
+    }
+
+    BATTERY_INFORMATION bi = {0};
+    bqi.InformationLevel = BatteryInformation;
+
+    if (DeviceIoControl(hBattery, IOCTL_BATTERY_QUERY_INFORMATION,
+                       &bqi, sizeof(bqi), &bi, sizeof(bi), &dwOut, NULL)) {
+        QString chemistry;
+
+        char chemChars[5];
+        memcpy(chemChars, &bi.Chemistry, 4);
+        chemChars[4] = '\0';
+
+        if (strcmp(chemChars, "LIon") == 0 || strcmp(chemChars, "Li-I") == 0) {
+            chemistry = "Li-ion";
+        } else if (strcmp(chemChars, "LiP") == 0) {
+            chemistry = "Li-Poly";
+        } else if (strcmp(chemChars, "NiCd") == 0) {
+            chemistry = "NiCd";
+        } else if (strcmp(chemChars, "NiMH") == 0) {
+            chemistry = "NiMH";
+        } else if (strcmp(chemChars, "PBat") == 0) {
+            chemistry = "Pb";
+        } else {
+            chemistry = QString("Unknown %1").arg(chemChars);
+        }
+
+        CloseHandle(hBattery);
+        SetupDiDestroyDeviceInfoList(hdev);
+        return chemistry;
+    } else {
+        qDebug() << "IOCTL_BATTERY_QUERY_INFORMATION failed:" << GetLastError();
+    }
+
+    CloseHandle(hBattery);
+    SetupDiDestroyDeviceInfoList(hdev);
+    return "Unknown";
+}
+
+QString BatteryWorker::getPowerSaveMode() {
+    GUID* schemeGuid = nullptr;
+        if (PowerGetActiveScheme(nullptr, &schemeGuid) != ERROR_SUCCESS || !schemeGuid) return "—";
+
+        DWORD size = 0;
+        PowerReadFriendlyName(nullptr, schemeGuid, nullptr, nullptr, nullptr, &size);
+
+        QString out = "—";
+        if (size > 2) {
+            QByteArray buf;
+            buf.resize(size);
+            if (PowerReadFriendlyName(nullptr, schemeGuid, nullptr, nullptr,
+                                      reinterpret_cast<UCHAR*>(buf.data()), &size) == ERROR_SUCCESS) {
+                out = QString::fromWCharArray(reinterpret_cast<const wchar_t*>(buf.constData()));
+            }
+        }
+        LocalFree(schemeGuid);
+        return out;
 }

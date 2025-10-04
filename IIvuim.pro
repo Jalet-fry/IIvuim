@@ -32,4 +32,4 @@ FORMS += \
 RESOURCES += \
     resources.qrc
 
-win32: LIBS += -luser32 -lpowrprof -ladvapi32
+win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi
