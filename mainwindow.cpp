@@ -11,7 +11,7 @@
 #include <QHoverEvent>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr)
+    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), isHoveringButton(false)
 {
     setWindowTitle("Лабораторные работы");
     setFixedSize(1200, 700);
@@ -59,8 +59,9 @@ MainWindow::MainWindow(QWidget *parent)
         );
         leftLayout->addWidget(button);
 
-        // Устанавливаем фильтр событий для кнопок
+        // Устанавливаем фильтр событий для кнопок и включаем отслеживание мыши
         button->installEventFilter(this);
+        button->setAttribute(Qt::WA_Hover, true);
 
         if (i == 1) connect(button, SIGNAL(clicked()), this, SLOT(openLab1()));
         if (i == 2) connect(button, SIGNAL(clicked()), this, SLOT(openLab2()));
@@ -91,8 +92,9 @@ MainWindow::MainWindow(QWidget *parent)
         );
         rightLayout->addWidget(button);
 
-        // Устанавливаем фильтр событий для кнопок
+        // Устанавливаем фильтр событий для кнопок и включаем отслеживание мыши
         button->installEventFilter(this);
+        button->setAttribute(Qt::WA_Hover, true);
 
         if (i == 4) connect(button, SIGNAL(clicked()), this, SLOT(openLab4()));
         if (i == 5) connect(button, SIGNAL(clicked()), this, SLOT(openLab5()));
@@ -141,7 +143,11 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
     if (jakeWidget) {
         if (event->type() == QEvent::HoverEnter) {
+            isHoveringButton = true;
             jakeWidget->onButtonHover();
+        } else if (event->type() == QEvent::HoverLeave) {
+            isHoveringButton = false;
+            jakeWidget->onButtonLeave();
         } else if (event->type() == QEvent::MouseButtonPress) {
             jakeWidget->onButtonClick();
         }

@@ -17,7 +17,7 @@ class JakeWidget : public QWidget
     Q_PROPERTY(qreal rotation READ rotation WRITE setRotation)
     
 public:
-    enum class JakeState { Idle, Hover, Click, FollowMouse, Lab1, Excited, Squash };
+    enum class JakeState { Idle, Hover, Click, FollowMouse, Lab1, Excited, Squash, ButtonHover };
 
     explicit JakeWidget(QWidget *parent = nullptr);
     QSize minimumSizeHint() const override { return QSize(300, 260); }
@@ -32,6 +32,7 @@ public slots:
     void setState(JakeState state);
     void followMouse();
     void onButtonHover();
+    void onButtonLeave();
     void onButtonClick();
 
 protected:
@@ -50,6 +51,7 @@ private:
     JakeState currentState;
     QTimer animationTimer;
     QTimer mouseFollowTimer;
+    QTimer hoverTimer;
     int frame;
     qreal t;
     QPointF targetPosition;

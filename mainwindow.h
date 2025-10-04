@@ -29,6 +29,7 @@ private:
     BatteryWidget *batteryWidget;
     JakeWidget *jakeWidget;
     void setupJake();
+    bool isHoveringButton;
 };
 
 #endif // MAINWINDOW_H
