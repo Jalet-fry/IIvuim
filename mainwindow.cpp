@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "Lab1/batterywidget.h"
+#include "Lab2/pciwidget.h"
 #include "Animation/jakewidget_xp.h"
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -12,7 +13,7 @@
 // #include <QHoverEvent> // Может быть недоступен в старых версиях Qt
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), isHoveringButton(false)
+    : QMainWindow(parent), batteryWidget(nullptr), pciWidget(nullptr), jakeWidget(nullptr), isHoveringButton(false)
 {
     setWindowTitle("Лабораторные работы");
     setFixedSize(1200, 700);
@@ -122,6 +123,10 @@ MainWindow::~MainWindow()
         batteryWidget->close();
         delete batteryWidget;
     }
+    if (pciWidget) {
+        pciWidget->close();
+        delete pciWidget;
+    }
     if (jakeWidget) {
         jakeWidget->close();
         delete jakeWidget;
@@ -181,7 +186,24 @@ void MainWindow::openLab1() {
 }
 
 void MainWindow::openLab2() {
-    QMessageBox::information(this, "ЛР 2", "Открываем лабораторную работу 2");
+    qDebug() << "Opening Lab2 - PCI Devices";
+    
+    // Если окно уже открыто, просто активируем его
+    if (pciWidget && !pciWidget->isHidden()) {
+        pciWidget->raise();
+        pciWidget->activateWindow();
+        return;
+    }
+    
+    // Создаем новое окно если его нет или оно скрыто
+    if (!pciWidget) {
+        pciWidget = new PCIWidget(nullptr); // nullptr для отдельного окна
+    }
+    
+    // Показываем окно
+    pciWidget->showAndStart();
+    
+    // Анимация Джейка при нажатии на кнопку
     if (jakeWidget) {
         jakeWidget->onButtonClick();
     }
