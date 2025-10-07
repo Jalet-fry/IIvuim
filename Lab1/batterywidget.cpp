@@ -6,6 +6,16 @@
 
 #ifdef Q_OS_WIN
     #include <windows.h>
+    #include <powrprof.h>
+    
+    // Объявляем функции для совместимости с Windows XP
+    // SetSuspendState уже объявлена в powrprof.h, но может быть недоступна в XP
+    // SetSystemPowerState может быть недоступна в новых версиях
+    #ifndef SetSystemPowerState
+        extern "C" {
+            __declspec(dllimport) BOOL WINAPI SetSystemPowerState(BOOL fSuspend, BOOL fForce);
+        }
+    #endif
 #endif
 
 BatteryWidget::BatteryWidget(QWidget *parent) : QWidget(parent)
@@ -93,6 +103,11 @@ void BatteryWidget::setupUI()
 
 void BatteryWidget::onBatteryInfoUpdated(const BatteryWorker::BatteryInfo &info)
 {
+    qDebug() << "BATTERY WIDGET: Received battery info update";
+    qDebug() << "Power Type:" << info.powerType;
+    qDebug() << "Charge Level:" << info.chargeLevel;
+    qDebug() << "Chemistry:" << info.batteryChemistry;
+    
     powerTypeLabel->setText(info.powerType);
     batteryChemistryLabel->setText(info.batteryChemistry);
     chargeLevelBar->setValue(info.chargeLevel);
@@ -157,12 +172,34 @@ void BatteryWidget::onHibernateClicked()
                 AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), nullptr, nullptr);
                 
                 if (GetLastError() == ERROR_SUCCESS) {
-                    SetSuspendState(TRUE, TRUE, FALSE);
+                    // Проверяем версию Windows для использования правильной функции
+                    OSVERSIONINFO osvi;
+                    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+                    
+                    if (GetVersionEx(&osvi)) {
+                        if (osvi.dwMajorVersion >= 6) {
+                            // Windows Vista и выше - используем SetSuspendState
+                            SetSuspendState(TRUE, TRUE, FALSE);
+                        } else {
+                            // Windows XP - используем SetSystemPowerState
+                            SetSystemPowerState(TRUE, FALSE);
+                        }
+                    } else {
+                        // Если не удалось определить версию, пробуем SetSuspendState
+                        // и в случае неудачи - SetSystemPowerState
+                        if (!SetSuspendState(TRUE, TRUE, FALSE)) {
+                            SetSystemPowerState(TRUE, FALSE);
+                        }
+                    }
                 } else {
                     QMessageBox::warning(this, "Ошибка", "Не удалось получить права для гибернации");
                 }
+            } else {
+                QMessageBox::warning(this, "Ошибка", "Не удалось найти привилегию SE_SHUTDOWN_NAME");
             }
             CloseHandle(hToken);
+        } else {
+            QMessageBox::warning(this, "Ошибка", "Не удалось открыть токен процесса");
         }
 #else
         QMessageBox::information(this, "Гибернация", "Функция гибернации доступна только в Windows");

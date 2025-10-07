@@ -16,15 +16,15 @@ CONFIG += c++11
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    batterywidget.cpp \
-    batteryworker.cpp \
-    jakewidget.cpp
+    Lab1/batterywidget.cpp \
+    Lab1/batteryworker.cpp \
+    Animation/jakewidget_xp.cpp
 
 HEADERS += \
     mainwindow.h \
-    batterywidget.h \
-    batteryworker.h \
-    jakewidget.h
+    Lab1/batterywidget.h \
+    Lab1/batteryworker.h \
+    Animation/jakewidget_xp.h
 
 FORMS += \
     mainwindow.ui

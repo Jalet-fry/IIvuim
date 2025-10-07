@@ -1,4 +1,4 @@
-#include "jakewidget.h"
+#include "jakewidget_xp.h"
 #include <QPainter>
 #include <QtMath>
 #include <QLabel>
@@ -6,35 +6,31 @@
 #include <QResizeEvent>
 #include <QMouseEvent>
 #include <QApplication>
+#include <QFile>
+#include <QDir>
+#include <QTemporaryFile>
 // #include <QDesktopWidget> // Устарел, не нужен для XP
-#include <QEasingCurve>
-// #include <QGraphicsOpacityEffect> // Может быть недоступен в старых версиях Qt
 #include <QDebug>
 
-JakeWidget::JakeWidget(QWidget *parent)
+JakeWidget_XP::JakeWidget_XP(QWidget *parent)
     : QWidget(parent), currentState(JakeState::FollowMouse), frame(0), t(0.0), 
       smoothFactor(0.15), m_scale(1.0), m_rotation(0.0),
       damping(0.85), acceleration(0.3), bouncePhase(0.0),
       squashAmount(0.0), stretchAmount(0.0),
-      movieLabel(new QLabel(this)), movie(nullptr),
-      scaleAnimation(new QPropertyAnimation(this, "scale", this)),
-      rotationAnimation(new QPropertyAnimation(this, "rotation", this))
+      movieLabel(new QLabel(this)), movie(nullptr)
 {
     setAttribute(Qt::WA_TransparentForMouseEvents, false);
     setMouseTracking(true);
     
-    // Улучшенный таймер анимации - 30 FPS для плавности
-    animationTimer.setInterval(33);
+    // Упрощенный таймер анимации - 20 FPS для совместимости с XP
+    animationTimer.setInterval(50);
     connect(&animationTimer, SIGNAL(timeout()), this, SLOT(onTick()));
     animationTimer.start();
     
-    // Более частое обновление следования за мышкой для плавности
-    mouseFollowTimer.setInterval(16); // ~60 FPS
+    // Упрощенное следование за мышкой
+    mouseFollowTimer.setInterval(50); // 20 FPS
     connect(&mouseFollowTimer, SIGNAL(timeout()), this, SLOT(followMouse()));
     mouseFollowTimer.start();
-    
-    // Таймер для автоматического возврата из состояния наведения
-    hoverTimer.setSingleShot(true);
 
     // Начальная позиция
     QPoint globalCursorPos = QCursor::pos();
@@ -47,20 +43,21 @@ JakeWidget::JakeWidget(QWidget *parent)
     movieLabel->setScaledContents(true);
     movieLabel->raise();
     movieLabel->hide(); // Скрываем по умолчанию
-    movieLabel->setGeometry(0, 0, width(), height()); // Устанавливаем размер
-    
-    // Настройка анимаций
-    scaleAnimation->setDuration(300);
-    scaleAnimation->setEasingCurve(QEasingCurve::OutElastic);
-    
-    rotationAnimation->setDuration(200);
-    rotationAnimation->setEasingCurve(QEasingCurve::OutBack);
+    movieLabel->setGeometry(0, 0, width(), height());
     
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
 }
 
-void JakeWidget::setState(JakeState state)
+JakeWidget_XP::~JakeWidget_XP()
+{
+    if (movie) {
+        movie->stop();
+        delete movie;
+    }
+}
+
+void JakeWidget_XP::setState(JakeState state)
 {
     if (currentState == state) return;
     currentState = state;
@@ -69,66 +66,44 @@ void JakeWidget::setState(JakeState state)
         ensureMovie(":/Animation/Jake.gif");
         if (movie) {
             movie->setSpeed(100);
-            movie->start(); // Убеждаемся что гифка запущена
-            connect(movie, SIGNAL(frameChanged(int)), this, SLOT(onMovieFrameChanged()));
+            movie->start();
         }
         if (movieLabel) movieLabel->show();
         mouseFollowTimer.stop();
         
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.0);
-        scaleAnimation->start();
+        // Простая анимация масштаба без QPropertyAnimation
+        m_scale = 1.0;
         
     } else if (state == JakeState::Hover) {
         ensureMovie(":/Animation/Jake.gif");
         if (movie) {
             movie->setSpeed(150);
-            movie->start(); // Убеждаемся что гифка запущена
+            movie->start();
         }
         if (movieLabel) movieLabel->show();
         mouseFollowTimer.stop();
         
         // Легкое увеличение при наведении
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.15);
-        scaleAnimation->setDuration(200);
-        scaleAnimation->start();
+        m_scale = 1.15;
         
     } else if (state == JakeState::Click) {
         frame = 0;
         mouseFollowTimer.stop();
         startSquashAnimation();
         
-        // Быстрое вращение при клике
-        rotationAnimation->stop();
-        rotationAnimation->setStartValue(0.0);
-        rotationAnimation->setEndValue(360.0);
-        rotationAnimation->setDuration(500);
-        rotationAnimation->start();
+        // Простое вращение при клике
+        m_rotation = 360.0;
         
-        // Возвращаемся к следованию через 0.8 секунды
-        QTimer::singleShot(800, this, [this]() {
-            setState(JakeState::Excited);
-        });
-        QTimer::singleShot(1500, this, [this]() {
-            setState(JakeState::FollowMouse);
-        });
+        // Возвращаемся к следованию через таймеры
+        QTimer::singleShot(800, this, SLOT(transitionToExcited()));
+        QTimer::singleShot(1500, this, SLOT(transitionToFollowMouse()));
         
     } else if (state == JakeState::FollowMouse) {
         if (movieLabel) movieLabel->hide();
         mouseFollowTimer.start();
         
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.0);
-        scaleAnimation->start();
-        
-        rotationAnimation->stop();
-        rotationAnimation->setStartValue(m_rotation);
-        rotationAnimation->setEndValue(0.0);
-        rotationAnimation->start();
+        m_scale = 1.0;
+        m_rotation = 0.0;
         
     } else if (state == JakeState::Lab1) {
         if (movieLabel) movieLabel->hide();
@@ -141,43 +116,28 @@ void JakeWidget::setState(JakeState state)
         mouseFollowTimer.stop();
         bouncePhase = 0.0;
         
-        // Подпрыгивание
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.2);
-        scaleAnimation->setDuration(150);
-        scaleAnimation->setEasingCurve(QEasingCurve::OutBounce);
-        scaleAnimation->start();
+        // Простое подпрыгивание
+        m_scale = 1.2;
         
     } else if (state == JakeState::ButtonHover) {
         // Показываем гифку при наведении на кнопку
         ensureMovie(":/Animation/Jake.gif");
         if (movie) {
-            qDebug() << "ButtonHover: Movie loaded, isValid:" << movie->isValid() << "frameCount:" << movie->frameCount();
             movie->setSpeed(120);
-            movie->start(); // Убеждаемся что гифка запущена
-            qDebug() << "ButtonHover: Movie started, state:" << movie->state();
-            connect(movie, SIGNAL(frameChanged(int)), this, SLOT(onMovieFrameChanged()));
-        } else {
-            qDebug() << "ButtonHover: Movie is null!";
+            movie->start();
         }
         if (movieLabel) {
             movieLabel->show();
-            qDebug() << "ButtonHover: MovieLabel shown";
         }
         mouseFollowTimer.stop();
         
         // Легкое увеличение при наведении на кнопку
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.1);
-        scaleAnimation->setDuration(200);
-        scaleAnimation->start();
+        m_scale = 1.1;
     }
     update();
 }
 
-void JakeWidget::followMouse()
+void JakeWidget_XP::followMouse()
 {
     if (currentState != JakeState::FollowMouse) return;
     
@@ -185,19 +145,29 @@ void JakeWidget::followMouse()
     update();
 }
 
-void JakeWidget::updatePhysics()
+void JakeWidget_XP::transitionToExcited()
+{
+    setState(JakeState::Excited);
+}
+
+void JakeWidget_XP::transitionToFollowMouse()
+{
+    setState(JakeState::FollowMouse);
+}
+
+void JakeWidget_XP::updatePhysics()
 {
     QPoint globalCursorPos = QCursor::pos();
     QPointF newTarget = QPointF(globalCursorPos - QPoint(width()/2, height()/2));
     
-    // Улучшенная физика движения с использованием скорости и затухания
+    // Упрощенная физика движения
     QPointF direction = newTarget - currentPosition;
     qreal distance = qSqrt(direction.x() * direction.x() + direction.y() * direction.y());
     
     // Применяем ускорение в направлении курсора
     if (distance > 1.0) {
-        QPointF acceleration = direction * (this->acceleration / distance);
-        velocity += acceleration;
+        QPointF accel = direction * (this->acceleration / distance);
+        velocity += accel;
     }
     
     // Применяем затухание
@@ -206,7 +176,7 @@ void JakeWidget::updatePhysics()
     // Обновляем позицию
     currentPosition += velocity;
     
-    // Небольшое покачивание при движении
+    // Простое покачивание при движении
     qreal velocityMag = qSqrt(velocity.x() * velocity.x() + velocity.y() * velocity.y());
     if (velocityMag > 0.5) {
         qreal wobble = qSin(t * 15.0) * velocityMag * 0.5;
@@ -225,14 +195,13 @@ void JakeWidget::updatePhysics()
     move(qRound(currentPosition.x()), qRound(currentPosition.y()));
 }
 
-void JakeWidget::onButtonHover()
+void JakeWidget_XP::onButtonHover()
 {
-    qDebug() << "onButtonHover called, current state:" << static_cast<int>(currentState);
     // Переходим в состояние наведения на кнопку
     setState(JakeState::ButtonHover);
 }
 
-void JakeWidget::onButtonLeave()
+void JakeWidget_XP::onButtonLeave()
 {
     // Возвращаемся к следованию за мышью когда мышь уходит с кнопки
     if (currentState == JakeState::ButtonHover) {
@@ -240,7 +209,7 @@ void JakeWidget::onButtonLeave()
     }
 }
 
-void JakeWidget::onButtonClick()
+void JakeWidget_XP::onButtonClick()
 {
     // Сразу скрываем гифку и показываем анимацию нажатия
     if (movieLabel) movieLabel->hide();
@@ -250,7 +219,7 @@ void JakeWidget::onButtonClick()
     setState(JakeState::Click);
 }
 
-void JakeWidget::onTick()
+void JakeWidget_XP::onTick()
 {
     frame = (frame + 1) % 1000000;
     t += 0.05;
@@ -264,18 +233,22 @@ void JakeWidget::onTick()
     squashAmount *= 0.95;
     stretchAmount *= 0.95;
     
+    // Простая анимация масштаба
+    if (m_scale > 1.0) {
+        m_scale *= 0.98;
+        if (m_scale < 1.01) m_scale = 1.0;
+    }
+    
+    // Простая анимация вращения
+    if (m_rotation > 0.1) {
+        m_rotation *= 0.95;
+        if (m_rotation < 0.1) m_rotation = 0.0;
+    }
+    
     update();
 }
 
-void JakeWidget::onMovieFrameChanged()
-{
-    // Добавляем легкое покачивание к GIF анимации
-    if (currentState == JakeState::Idle || currentState == JakeState::Hover || currentState == JakeState::ButtonHover) {
-        update();
-    }
-}
-
-void JakeWidget::paintEvent(QPaintEvent *event)
+void JakeWidget_XP::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     
@@ -292,7 +265,8 @@ void JakeWidget::paintEvent(QPaintEvent *event)
     if (currentState == JakeState::Idle || currentState == JakeState::Hover || currentState == JakeState::ButtonHover) {
         // Показываем GIF через movieLabel
         if (movieLabel && movieLabel->isVisible()) {
-            // GIF отрисовывается через QLabel
+            // GIF отрисовывается через QLabel - ничего дополнительного не нужно
+            return; // Выходим, так как QLabel сам отрисовывает GIF
         }
     } else if (currentState == JakeState::Lab1) {
         QRectF bounds = rect();
@@ -333,16 +307,15 @@ void JakeWidget::paintEvent(QPaintEvent *event)
     }
 }
 
-void JakeWidget::resizeEvent(QResizeEvent *event)
+void JakeWidget_XP::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
     if (movieLabel) {
         movieLabel->setGeometry(0, 0, width(), height());
-        qDebug() << "ResizeEvent: MovieLabel geometry set to" << movieLabel->geometry();
     }
 }
 
-void JakeWidget::mousePressEvent(QMouseEvent *event)
+void JakeWidget_XP::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         onButtonClick();
@@ -350,62 +323,49 @@ void JakeWidget::mousePressEvent(QMouseEvent *event)
     QWidget::mousePressEvent(event);
 }
 
-void JakeWidget::mouseMoveEvent(QMouseEvent *event)
+void JakeWidget_XP::mouseMoveEvent(QMouseEvent *event)
 {
     QWidget::mouseMoveEvent(event);
 }
 
-void JakeWidget::enterEvent(QEvent *event)
+void JakeWidget_XP::enterEvent(QEvent *event)
 {
     if (currentState == JakeState::FollowMouse) {
         // Небольшое увеличение при наведении
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.08);
-        scaleAnimation->setDuration(150);
-        scaleAnimation->start();
+        m_scale = 1.08;
     }
     QWidget::enterEvent(event);
 }
 
-void JakeWidget::leaveEvent(QEvent *event)
+void JakeWidget_XP::leaveEvent(QEvent *event)
 {
     if (currentState == JakeState::FollowMouse) {
         // Возвращаемся к нормальному размеру
-        scaleAnimation->stop();
-        scaleAnimation->setStartValue(m_scale);
-        scaleAnimation->setEndValue(1.0);
-        scaleAnimation->setDuration(150);
-        scaleAnimation->start();
+        m_scale = 1.0;
     }
     QWidget::leaveEvent(event);
 }
 
-void JakeWidget::startBounceAnimation()
+void JakeWidget_XP::startBounceAnimation()
 {
     bouncePhase = 0.0;
-    scaleAnimation->stop();
-    scaleAnimation->setStartValue(m_scale);
-    scaleAnimation->setEndValue(1.1);
-    scaleAnimation->setDuration(400);
-    scaleAnimation->setEasingCurve(QEasingCurve::OutBounce);
-    scaleAnimation->start();
+    m_scale = 1.1;
 }
 
-void JakeWidget::startSquashAnimation()
+void JakeWidget_XP::startSquashAnimation()
 {
     squashAmount = 0.3;
     stretchAmount = 0.0;
 }
 
-qreal JakeWidget::easeOutElastic(qreal t)
+qreal JakeWidget_XP::easeOutElastic(qreal t)
 {
     if (t == 0.0 || t == 1.0) return t;
     qreal p = 0.3;
     return qPow(2.0, -10.0 * t) * qSin((t - p / 4.0) * (2.0 * M_PI) / p) + 1.0;
 }
 
-qreal JakeWidget::easeOutBounce(qreal t)
+qreal JakeWidget_XP::easeOutBounce(qreal t)
 {
     if (t < (1.0 / 2.75)) {
         return 7.5625 * t * t;
@@ -421,7 +381,7 @@ qreal JakeWidget::easeOutBounce(qreal t)
     }
 }
 
-QPointF JakeWidget::calculateArmPosition(const QPointF& shoulder, const QPointF& target, qreal armLength)
+QPointF JakeWidget_XP::calculateArmPosition(const QPointF& shoulder, const QPointF& target, qreal armLength)
 {
     QPointF direction = target - shoulder;
     qreal distance = qSqrt(direction.x() * direction.x() + direction.y() * direction.y());
@@ -434,7 +394,7 @@ QPointF JakeWidget::calculateArmPosition(const QPointF& shoulder, const QPointF&
     }
 }
 
-void JakeWidget::drawJakeFollowMouse(QPainter &p, const QRectF &r)
+void JakeWidget_XP::drawJakeFollowMouse(QPainter &p, const QRectF &r)
 {
     // Более яркие цвета как у оригинального Джейка
     QColor bodyColor(255, 212, 102);
@@ -558,7 +518,7 @@ void JakeWidget::drawJakeFollowMouse(QPainter &p, const QRectF &r)
     p.restore();
 }
 
-void JakeWidget::drawJakeExcited(QPainter &p, const QRectF &r)
+void JakeWidget_XP::drawJakeExcited(QPainter &p, const QRectF &r)
 {
     // Яркие цвета для возбужденного состояния
     QColor bodyColor(255, 220, 110);
@@ -663,7 +623,7 @@ void JakeWidget::drawJakeExcited(QPainter &p, const QRectF &r)
     p.restore();
 }
 
-void JakeWidget::drawJakeLab1(QPainter &p, const QRectF &r)
+void JakeWidget_XP::drawJakeLab1(QPainter &p, const QRectF &r)
 {
     // Colors
     QColor bodyColor(255, 212, 102);
@@ -756,34 +716,63 @@ void JakeWidget::drawJakeLab1(QPainter &p, const QRectF &r)
     p.restore();
 }
 
-void JakeWidget::ensureMovie(const QString &path)
+void JakeWidget_XP::ensureMovie(const QString &path)
 {
-    qDebug() << "ensureMovie called with path:" << path;
     if (!movieLabel) {
-        qDebug() << "MovieLabel is null!";
         return;
     }
     if (movie && movie->fileName() == path) {
-        qDebug() << "Movie already loaded with same path";
         return;
     }
     if (movie) {
-        qDebug() << "Stopping and deleting existing movie";
         movie->stop();
         delete movie;
         movie = nullptr;
     }
-    qDebug() << "Creating new movie with path:" << path;
+    
+    // Попытка 1: Загрузить напрямую из ресурсов
     movie = new QMovie(path);
-    if (!movie->isValid()) {
-        qDebug() << "Movie is not valid!";
-        delete movie;
-        movie = nullptr;
+    if (movie->isValid()) {
+        movieLabel->setMovie(movie);
+        movie->start();
+        return;
+    }
+    
+    // Попытка 2: Для Windows XP - копируем из ресурсов во временный файл
+    delete movie;
+    movie = nullptr;
+    
+    QFile resourceFile(path);
+    if (!resourceFile.open(QIODevice::ReadOnly)) {
+        qDebug() << "Failed to open resource file:" << path;
         movieLabel->clear();
         return;
     }
-    qDebug() << "Movie is valid, frameCount:" << movie->frameCount();
+    
+    QByteArray gifData = resourceFile.readAll();
+    resourceFile.close();
+    
+    QString tempPath = QDir::tempPath() + "/jake_temp.gif";
+    QFile tempFile(tempPath);
+    if (!tempFile.open(QIODevice::WriteOnly)) {
+        qDebug() << "Failed to create temp file:" << tempPath;
+        movieLabel->clear();
+        return;
+    }
+    
+    tempFile.write(gifData);
+    tempFile.close();
+    
+    // Попытка загрузить из временного файла
+    movie = new QMovie(tempPath);
+    if (!movie->isValid()) {
+        delete movie;
+        movie = nullptr;
+        movieLabel->clear();
+        qDebug() << "Failed to load GIF from temp file:" << tempPath << "- Qt GIF plugin may be missing on XP";
+        return;
+    }
+    
     movieLabel->setMovie(movie);
     movie->start();
-    qDebug() << "Movie started, state:" << movie->state();
 }

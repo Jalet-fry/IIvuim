@@ -17,11 +17,11 @@ class JakeWidget : public QWidget
     Q_PROPERTY(qreal rotation READ rotation WRITE setRotation)
     
 public:
-    enum class JakeState { Idle, Hover, Click, FollowMouse, Lab1, Excited, Squash, ButtonHover };
+    enum JakeState { Idle, Hover, Click, FollowMouse, Lab1, Excited, Squash, ButtonHover };
 
     explicit JakeWidget(QWidget *parent = nullptr);
-    QSize minimumSizeHint() const override { return QSize(300, 260); }
-    QSize sizeHint() const override { return QSize(360, 300); }
+    QSize minimumSizeHint() const { return QSize(300, 260); }
+    QSize sizeHint() const { return QSize(360, 300); }
 
     qreal scale() const { return m_scale; }
     void setScale(qreal s) { m_scale = s; update(); }
@@ -36,12 +36,12 @@ public slots:
     void onButtonClick();
 
 protected:
-    void paintEvent(QPaintEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override;
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseMoveEvent(QMouseEvent *event) override;
-    void enterEvent(QEvent *event) override;
-    void leaveEvent(QEvent *event) override;
+    void paintEvent(QPaintEvent *event);
+    void resizeEvent(QResizeEvent *event);
+    void mousePressEvent(QMouseEvent *event);
+    void mouseMoveEvent(QMouseEvent *event);
+    void enterEvent(QEvent *event);
+    void leaveEvent(QEvent *event);
 
 private slots:
     void onTick();

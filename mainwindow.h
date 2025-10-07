@@ -4,7 +4,7 @@
 #include <QMainWindow>
 
 class BatteryWidget;
-class JakeWidget;
+class JakeWidget_XP;
 
 class MainWindow : public QMainWindow
 {
@@ -15,7 +15,7 @@ public:
     ~MainWindow();
 
 protected:
-    bool eventFilter(QObject *obj, QEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event);
 
 private slots:
     void openLab1();
@@ -27,7 +27,7 @@ private slots:
 
 private:
     BatteryWidget *batteryWidget;
-    JakeWidget *jakeWidget;
+    JakeWidget_XP *jakeWidget;
     void setupJake();
     bool isHoveringButton;
 };

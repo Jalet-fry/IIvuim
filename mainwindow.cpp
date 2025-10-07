@@ -1,14 +1,15 @@
 #include "mainwindow.h"
-#include "batterywidget.h"
-#include "jakewidget.h"
+#include "Lab1/batterywidget.h"
+#include "Animation/jakewidget_xp.h"
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QWidget>
 #include <QLabel>
 #include <QMessageBox>
+#include <QDebug>
 #include <QEvent>
-#include <QHoverEvent>
+// #include <QHoverEvent> // Может быть недоступен в старых версиях Qt
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), isHoveringButton(false)
@@ -61,7 +62,7 @@ MainWindow::MainWindow(QWidget *parent)
 
         // Устанавливаем фильтр событий для кнопок и включаем отслеживание мыши
         button->installEventFilter(this);
-        button->setAttribute(Qt::WA_Hover, true);
+        // button->setAttribute(Qt::WA_Hover, true); // Может не работать в старых версиях Qt
 
         if (i == 1) connect(button, SIGNAL(clicked()), this, SLOT(openLab1()));
         if (i == 2) connect(button, SIGNAL(clicked()), this, SLOT(openLab2()));
@@ -94,7 +95,7 @@ MainWindow::MainWindow(QWidget *parent)
 
         // Устанавливаем фильтр событий для кнопок и включаем отслеживание мыши
         button->installEventFilter(this);
-        button->setAttribute(Qt::WA_Hover, true);
+        // button->setAttribute(Qt::WA_Hover, true); // Может не работать в старых версиях Qt
 
         if (i == 4) connect(button, SIGNAL(clicked()), this, SLOT(openLab4()));
         if (i == 5) connect(button, SIGNAL(clicked()), this, SLOT(openLab5()));
@@ -129,7 +130,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupJake()
 {
-    jakeWidget = new JakeWidget();
+    jakeWidget = new JakeWidget_XP();
     jakeWidget->resize(200, 160);
     jakeWidget->show();
     
@@ -142,10 +143,10 @@ void MainWindow::setupJake()
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 {
     if (jakeWidget) {
-        if (event->type() == QEvent::HoverEnter) {
+        if (event->type() == QEvent::Enter) {
             isHoveringButton = true;
             jakeWidget->onButtonHover();
-        } else if (event->type() == QEvent::HoverLeave) {
+        } else if (event->type() == QEvent::Leave) {
             isHoveringButton = false;
             jakeWidget->onButtonLeave();
         } else if (event->type() == QEvent::MouseButtonPress) {
@@ -156,9 +157,24 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 }
 
 void MainWindow::openLab1() {
-    BatteryWidget *batteryWindow = new BatteryWidget(nullptr);
-    batteryWindow->showAndStart();
+    qDebug() << "Opening Lab1 - Battery Information";
     
+    // Если окно уже открыто, просто активируем его
+    if (batteryWidget && !batteryWidget->isHidden()) {
+        batteryWidget->raise();
+        batteryWidget->activateWindow();
+        return;
+    }
+    
+    // Создаем новое окно если его нет или оно скрыто
+    if (!batteryWidget) {
+        batteryWidget = new BatteryWidget(nullptr); // nullptr для отдельного окна
+    }
+    
+    // Показываем окно и запускаем мониторинг
+    batteryWidget->showAndStart();
+    
+    // Анимация Джейка при нажатии на кнопку
     if (jakeWidget) {
         jakeWidget->onButtonClick();
     }

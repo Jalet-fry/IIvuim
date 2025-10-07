@@ -2,11 +2,12 @@
 #include <QDebug>
 #include <QString>
 #include <vector>
+#include <cstring>
 
 BatteryWorker::BatteryWorker(QObject *parent) : QObject(parent)
 {
     timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &BatteryWorker::updateBatteryInfo);
+    connect(timer, SIGNAL(timeout()), this, SLOT(updateBatteryInfo()));
 }
 
 BatteryWorker::~BatteryWorker()
@@ -41,6 +42,9 @@ void BatteryWorker::getBatteryInfo()
     SYSTEM_POWER_STATUS status;
 
     if (GetSystemPowerStatus(&status)) {
+        qDebug() << "BATTERY INFO: AC Line Status:" << status.ACLineStatus;
+        qDebug() << "BATTERY INFO: Battery Life Percent:" << status.BatteryLifePercent;
+        qDebug() << "BATTERY INFO: Battery Life Time:" << status.BatteryLifeTime;
 
         switch (status.ACLineStatus) {
         case 0:
@@ -49,7 +53,12 @@ void BatteryWorker::getBatteryInfo()
         case 1:
             batteryInfo.powerType = "AC supply";
             break;
-        default: batteryInfo.powerType = "Unknown"; break;
+        case 255: // Неизвестно
+            batteryInfo.powerType = "Unknown";
+            break;
+        default: 
+            batteryInfo.powerType = "Unknown"; 
+            break;
         }
 
         batteryInfo.chargeLevel = (status.BatteryLifePercent == 255) ?
@@ -59,20 +68,31 @@ void BatteryWorker::getBatteryInfo()
 
         batteryInfo.powerSaveMode = getPowerSaveMode();
 
-        if (status.ACLineStatus == 1 || status.BatteryLifeTime == 0xFFFFFFFF) {
+        // Обработка времени работы батареи с проверкой на валидность
+        if (status.ACLineStatus == 1 || status.BatteryLifeTime == 0xFFFFFFFF || status.BatteryLifeTime == 0) {
             batteryInfo.batteryLifeTime = -1;
         } else {
             batteryInfo.batteryLifeTime = status.BatteryLifeTime;
         }
 
-        if (status.ACLineStatus == 1 || status.BatteryLifeTime == 0xFFFFFFFF) {
+        // Обработка полного времени работы батареи
+        if (status.ACLineStatus == 1 || status.BatteryLifeTime == 0xFFFFFFFF || 
+            status.BatteryLifeTime == 0 || status.BatteryLifePercent == 0 || status.BatteryLifePercent == 255) {
             batteryInfo.batteryFullLifeTime = -1;
         } else {
             batteryInfo.batteryFullLifeTime = static_cast<qint64>((100.0/status.BatteryLifePercent)*status.BatteryLifeTime);
         }
 
     } else {
-        qDebug() << "ERROR: retreiving system power status failed:" << GetLastError();
+        qDebug() << "ERROR: retrieving system power status failed:" << GetLastError();
+        
+        // Устанавливаем значения по умолчанию при ошибке
+        batteryInfo.powerType = "Unknown";
+        batteryInfo.chargeLevel = -1;
+        batteryInfo.batteryChemistry = "Unknown";
+        batteryInfo.powerSaveMode = "Unknown";
+        batteryInfo.batteryLifeTime = -1;
+        batteryInfo.batteryFullLifeTime = -1;
     }
 }
 
@@ -85,7 +105,9 @@ QString BatteryWorker::getBatteryChemistry()
         return "Unknown";
     }
 
-    SP_DEVICE_INTERFACE_DATA did = { sizeof(SP_DEVICE_INTERFACE_DATA) };
+    SP_DEVICE_INTERFACE_DATA did;
+    memset(&did, 0, sizeof(did));
+    did.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA);
     if (!SetupDiEnumDeviceInterfaces(hdev, 0, &GUID_DEVICE_BATTERY, 0, &did)) {
         SetupDiDestroyDeviceInfoList(hdev);
         qDebug() << "SetupDiEnumDeviceInterfaces failed:" << GetLastError();
@@ -122,7 +144,8 @@ QString BatteryWorker::getBatteryChemistry()
         return "Unknown";
     }
 
-    BATTERY_QUERY_INFORMATION bqi = {0};
+    BATTERY_QUERY_INFORMATION bqi;
+    memset(&bqi, 0, sizeof(bqi));
     DWORD dwWait = 0;
     DWORD dwOut;
 
@@ -136,7 +159,8 @@ QString BatteryWorker::getBatteryChemistry()
         return "Неизвестно";
     }
 
-    BATTERY_INFORMATION bi = {0};
+    BATTERY_INFORMATION bi;
+    memset(&bi, 0, sizeof(bi));
     bqi.InformationLevel = BatteryInformation;
 
     if (DeviceIoControl(hBattery, IOCTL_BATTERY_QUERY_INFORMATION,
@@ -147,7 +171,7 @@ QString BatteryWorker::getBatteryChemistry()
         memcpy(chemChars, &bi.Chemistry, 4);
         chemChars[4] = '\0';
 
-        if (strcmp(chemChars, "LIon") == 0 || strcmp(chemChars, "Li-I") == 0) {
+        if (strcmp(chemChars, "LION") == 0 || strcmp(chemChars, "Li-I") == 0) {
             chemistry = "Li-ion";
         } else if (strcmp(chemChars, "LiP") == 0) {
             chemistry = "Li-Poly";
@@ -174,21 +198,62 @@ QString BatteryWorker::getBatteryChemistry()
 }
 
 QString BatteryWorker::getPowerSaveMode() {
-    GUID* schemeGuid = nullptr;
-        if (PowerGetActiveScheme(nullptr, &schemeGuid) != ERROR_SUCCESS || !schemeGuid) return "—";
+#if _WIN32_WINNT >= 0x0600  // Windows Vista и выше
+    // Проверяем, доступна ли функция PowerGetActiveScheme
+    typedef DWORD (WINAPI *PowerGetActiveSchemeFunc)(HKEY, GUID**);
+    typedef DWORD (WINAPI *PowerReadFriendlyNameFunc)(HKEY, GUID*, GUID*, GUID*, PUCHAR, LPDWORD);
+    
+    HMODULE hPowrProf = LoadLibraryA("powrprof.dll");
+    if (hPowrProf) {
+        PowerGetActiveSchemeFunc pPowerGetActiveScheme = 
+            (PowerGetActiveSchemeFunc)GetProcAddress(hPowrProf, "PowerGetActiveScheme");
+        PowerReadFriendlyNameFunc pPowerReadFriendlyName = 
+            (PowerReadFriendlyNameFunc)GetProcAddress(hPowrProf, "PowerReadFriendlyName");
+        
+        if (pPowerGetActiveScheme && pPowerReadFriendlyName) {
+            GUID* schemeGuid = nullptr;
+            if (pPowerGetActiveScheme(nullptr, &schemeGuid) == ERROR_SUCCESS && schemeGuid) {
+                DWORD size = 0;
+                pPowerReadFriendlyName(nullptr, schemeGuid, nullptr, nullptr, nullptr, &size);
 
-        DWORD size = 0;
-        PowerReadFriendlyName(nullptr, schemeGuid, nullptr, nullptr, nullptr, &size);
-
-        QString out = "—";
-        if (size > 2) {
-            QByteArray buf;
-            buf.resize(size);
-            if (PowerReadFriendlyName(nullptr, schemeGuid, nullptr, nullptr,
-                                      reinterpret_cast<UCHAR*>(buf.data()), &size) == ERROR_SUCCESS) {
-                out = QString::fromWCharArray(reinterpret_cast<const wchar_t*>(buf.constData()));
+                QString out = "—";
+                if (size > 2) {
+                    QByteArray buf;
+                    buf.resize(size);
+                    if (pPowerReadFriendlyName(nullptr, schemeGuid, nullptr, nullptr,
+                                              reinterpret_cast<UCHAR*>(buf.data()), &size) == ERROR_SUCCESS) {
+                        out = QString::fromWCharArray(reinterpret_cast<const wchar_t*>(buf.constData()));
+                    }
+                }
+                LocalFree(schemeGuid);
+                FreeLibrary(hPowrProf);
+                return out;
+            }
+            if (schemeGuid) LocalFree(schemeGuid);
+        }
+        FreeLibrary(hPowrProf);
+    }
+    return "Схема питания недоступна";
+#else  // Windows XP
+    // Для Windows XP используем более простой подход
+    HKEY hKey;
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, 
+                      "SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes", 
+                      0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        DWORD activeScheme = 0;
+        DWORD dataSize = sizeof(activeScheme);
+        if (RegQueryValueExA(hKey, "ActivePowerScheme", nullptr, nullptr, 
+                            reinterpret_cast<LPBYTE>(&activeScheme), &dataSize) == ERROR_SUCCESS) {
+            RegCloseKey(hKey);
+            switch (activeScheme) {
+                case 0x00000000: return "Сбалансированная";
+                case 0x00000001: return "Экономия энергии";
+                case 0x00000002: return "Высокая производительность";
+                default: return QString("Схема %1").arg(activeScheme, 8, 16, QChar('0'));
             }
         }
-        LocalFree(schemeGuid);
-        return out;
+        RegCloseKey(hKey);
+    }
+    return "Windows XP (схема неизвестна)";
+#endif
 }
