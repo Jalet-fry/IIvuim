@@ -24,6 +24,15 @@ struct PCI_Device {
     quint8 function;
     QString vendorName;
     QString deviceName;
+    
+    // Дополнительные характеристики из Configuration Space
+    quint8 classCode;      // Offset 0x0B - Class Code
+    quint8 subClass;       // Offset 0x0A - SubClass
+    quint8 progIF;         // Offset 0x09 - Programming Interface
+    quint8 revisionID;     // Offset 0x08 - Revision ID
+    quint8 headerType;     // Offset 0x0E - Header Type
+    quint16 subsysVendorID; // Offset 0x2C - Subsystem Vendor ID
+    quint16 subsysID;      // Offset 0x2E - Subsystem ID
 };
 
 class PCIWidget_GiveIO : public QWidget
@@ -39,6 +48,7 @@ public:
 private slots:
     void scanPCI_devices();
     void clearLog();
+    void onDeviceSelected();
 
 private:
     QTableWidget *tableWidget;
@@ -67,6 +77,14 @@ private:
     // Вспомогательные методы
     QString getVendorName(quint16 vendorID);
     QString getDeviceName(quint16 vendorID, quint16 deviceID);
+    
+    // Классификация устройств
+    QString getClassString(quint8 classCode);
+    QString getSubClassString(quint8 classCode, quint8 subClass);
+    QString getProgIFString(quint8 classCode, quint8 subClass, quint8 progIF);
+    
+    // Чтение дополнительных регистров PCI
+    DWORD readPCIConfigDword(quint8 bus, quint8 device, quint8 function, quint8 offset);
 
     // GiveIO реализация
     bool giveioInitialize();

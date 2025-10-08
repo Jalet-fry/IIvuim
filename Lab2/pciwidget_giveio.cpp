@@ -137,9 +137,13 @@ void PCIWidget_GiveIO::initializeUI()
 
     // Таблица устройств
     tableWidget = new QTableWidget(this);
-    tableWidget->setColumnCount(7);
+    tableWidget->setColumnCount(11);
     QStringList headers;
-    headers << "Bus" << "Device" << "Function" << "VendorID" << "DeviceID" << "Vendor" << "Device";
+    headers << "Bus" << "Device" << "Function" 
+            << "VendorID" << "DeviceID" 
+            << "Vendor" << "Device"
+            << "Class Code" << "SubClass"
+            << "Prog IF" << "Header";
     tableWidget->setHorizontalHeaderLabels(headers);
     tableWidget->horizontalHeader()->setStretchLastSection(true);
     tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -195,6 +199,7 @@ void PCIWidget_GiveIO::initializeUI()
     // Подключаем сигналы
     connect(scanButton, SIGNAL(clicked()), this, SLOT(scanPCI_devices()));
     connect(clearButton, SIGNAL(clicked()), this, SLOT(clearLog()));
+    connect(tableWidget, SIGNAL(itemSelectionChanged()), this, SLOT(onDeviceSelected()));
 
     resize(1000, 700);
     setWindowTitle("PCI Devices Scanner - GiveIO");
@@ -221,6 +226,81 @@ void PCIWidget_GiveIO::logMessage(const QString &message, bool isError)
 void PCIWidget_GiveIO::clearLog()
 {
     logTextEdit->clear();
+}
+
+void PCIWidget_GiveIO::onDeviceSelected()
+{
+    QList<QTableWidgetItem*> selectedItems = tableWidget->selectedItems();
+    if (selectedItems.isEmpty()) {
+        return;
+    }
+    
+    int row = tableWidget->currentRow();
+    if (row < 0 || row >= pciDevices.size()) {
+        return;
+    }
+    
+    const PCI_Device& dev = pciDevices[row];
+    
+    QString details = QString(
+        "═══════════════════════════════════════════════════════════\n"
+        "  ПОЛНОЕ КОНФИГУРАЦИОННОЕ ПРОСТРАНСТВО PCI УСТРОЙСТВА\n"
+        "═══════════════════════════════════════════════════════════\n\n"
+        "📍 ФИЗИЧЕСКОЕ РАСПОЛОЖЕНИЕ:\n"
+        "   Bus: %1 (0x%2)  |  Device: %3 (0x%4)  |  Function: %5 (0x%6)\n\n"
+        "───────────────────────────────────────────────────────────\n"
+        "🔑 ИДЕНТИФИКАЦИЯ УСТРОЙСТВА (Offset 0x00):\n"
+        "   Vendor ID:    %7 (0x%8)\n"
+        "   Device ID:    %9 (0x%10)\n"
+        "   Vendor Name:  %11\n"
+        "   Device Name:  %12\n\n"
+        "───────────────────────────────────────────────────────────\n"
+        "📊 КЛАССИФИКАЦИЯ УСТРОЙСТВА (Offset 0x08):\n"
+        "   Class Code:   0x%13 - %14\n"
+        "   SubClass:     0x%15 - %16\n"
+        "   Prog IF:      %17\n"
+        "   Revision ID:  0x%18\n\n"
+        "───────────────────────────────────────────────────────────\n"
+        "🔧 ЗАГОЛОВОК КОНФИГУРАЦИИ (Offset 0x0C-0x0F):\n"
+        "   Header Type:  0x%19 %20\n\n"
+    ).arg(dev.bus).arg(dev.bus, 2, 16, QChar('0')).toUpper()
+     .arg(dev.device).arg(dev.device, 2, 16, QChar('0')).toUpper()
+     .arg(dev.function).arg(dev.function, 1, 16, QChar('0')).toUpper()
+     .arg(dev.vendorID).arg(dev.vendorID, 4, 16, QChar('0')).toUpper()
+     .arg(dev.deviceID).arg(dev.deviceID, 4, 16, QChar('0')).toUpper()
+     .arg(dev.vendorName)
+     .arg(dev.deviceName)
+     .arg(dev.classCode, 2, 16, QChar('0')).toUpper()
+     .arg(getClassString(dev.classCode))
+     .arg(dev.subClass, 2, 16, QChar('0')).toUpper()
+     .arg(getSubClassString(dev.classCode, dev.subClass))
+     .arg(getProgIFString(dev.classCode, dev.subClass, dev.progIF))
+     .arg(dev.revisionID, 2, 16, QChar('0')).toUpper()
+     .arg(dev.headerType, 2, 16, QChar('0')).toUpper()
+     .arg((dev.headerType & 0x7F) == 0x00 ? "(Standard PCI Device)" : 
+          (dev.headerType & 0x7F) == 0x01 ? "(PCI-to-PCI Bridge)" :
+          (dev.headerType & 0x7F) == 0x02 ? "(CardBus Bridge)" : "(Unknown)");
+    
+    // Добавляем информацию о подсистеме для обычных устройств
+    if ((dev.headerType & 0x7F) == 0x00 && (dev.subsysVendorID != 0 || dev.subsysID != 0)) {
+        details += QString(
+            "───────────────────────────────────────────────────────────\n"
+            "🏷️  ПОДСИСТЕМА (Offset 0x2C):\n"
+            "   Subsystem Vendor ID:  0x%1\n"
+            "   Subsystem ID:         0x%2\n\n"
+        ).arg(dev.subsysVendorID, 4, 16, QChar('0')).toUpper()
+         .arg(dev.subsysID, 4, 16, QChar('0')).toUpper();
+    }
+    
+    details += "═══════════════════════════════════════════════════════════\n";
+    
+    logMessage("═══ Показана детальная информация об устройстве ═══");
+    logMessage(QString("Bus %1, Device %2, Function %3: %4 %5")
+               .arg(dev.bus).arg(dev.device).arg(dev.function)
+               .arg(dev.vendorName).arg(dev.deviceName));
+    
+    // Можно вывести в отдельное окно или в лог
+    QMessageBox::information(this, "Детальная информация о PCI устройстве", details);
 }
 
 // GiveIO implementation
@@ -431,18 +511,40 @@ bool PCIWidget_GiveIO::scanPCI_GiveIO()
                     dev.vendorName = getVendorName(vendorID);
                     dev.deviceName = getDeviceName(vendorID, deviceID);
 
+                    // Читаем регистр 0x08: Revision ID, Prog IF, SubClass, Class Code
+                    DWORD classReg = readPCIConfigDword(bus, device, function, 0x08);
+                    dev.revisionID = classReg & 0xFF;           // Биты 7-0
+                    dev.progIF = (classReg >> 8) & 0xFF;        // Биты 15-8
+                    dev.subClass = (classReg >> 16) & 0xFF;     // Биты 23-16
+                    dev.classCode = (classReg >> 24) & 0xFF;    // Биты 31-24
+                    
+                    // Читаем регистр 0x0C: Cache Line, Latency Timer, Header Type, BIST
+                    DWORD headerReg = readPCIConfigDword(bus, device, function, 0x0C);
+                    dev.headerType = (headerReg >> 16) & 0xFF;  // Байт offset 0x0E
+                    
+                    // Читаем регистр 0x2C: Subsystem Vendor ID и Subsystem ID (только для Header Type 0)
+                    if ((dev.headerType & 0x7F) == 0x00) {
+                        DWORD subsysReg = readPCIConfigDword(bus, device, function, 0x2C);
+                        dev.subsysVendorID = subsysReg & 0xFFFF;
+                        dev.subsysID = (subsysReg >> 16) & 0xFFFF;
+                    } else {
+                        dev.subsysVendorID = 0;
+                        dev.subsysID = 0;
+                    }
+
                     pciDevices.append(dev);
                     addDeviceToTable(dev);
                     foundDevices++;
 
-                    logMessage(QString("Найдено: Bus=0x%1 Dev=0x%2 Func=0x%3 VID=0x%4 DID=0x%5 - %6 %7")
+                    logMessage(QString("Найдено: Bus=0x%1 Dev=0x%2 Func=0x%3 VID=0x%4 DID=0x%5 - %6 [%7 / %8]")
                               .arg(bus, 2, 16, QChar('0'))
                               .arg(device, 2, 16, QChar('0'))
                               .arg(function, 1, 16, QChar('0'))
                               .arg(vendorID, 4, 16, QChar('0'))
                               .arg(deviceID, 4, 16, QChar('0'))
                               .arg(dev.vendorName)
-                              .arg(dev.deviceName));
+                              .arg(getClassString(dev.classCode))
+                              .arg(getSubClassString(dev.classCode, dev.subClass)));
                 }
             }
         }
@@ -467,6 +569,167 @@ bool PCIWidget_GiveIO::scanPCI_GiveIO()
     logMessage(QString("Сканирование завершено. Найдено устройств: %1").arg(foundDevices));
 
     return foundDevices > 0;
+}
+
+DWORD PCIWidget_GiveIO::readPCIConfigDword(quint8 bus, quint8 device, quint8 function, quint8 offset)
+{
+    // Формируем адрес Configuration Space для указанного offset
+    DWORD address = 0x80000000 | (bus << 16) | (device << 11) | (function << 8) | (offset & 0xFC);
+    
+    // Записываем адрес в порт 0xCF8
+    if (!writePortDword(0x0CF8, address)) {
+        return 0xFFFFFFFF;
+    }
+    
+    // Читаем данные из порта 0xCFC
+    return readPortDword(0x0CFC);
+}
+
+QString PCIWidget_GiveIO::getClassString(quint8 classCode)
+{
+    switch (classCode) {
+        case 0x00: return "Pre-2.0 PCI Specification Device";
+        case 0x01: return "Mass Storage Controller";
+        case 0x02: return "Network Controller";
+        case 0x03: return "Display Controller";
+        case 0x04: return "Multimedia Device";
+        case 0x05: return "Memory Controller";
+        case 0x06: return "Bridge Device";
+        case 0x07: return "Simple Communications Controller";
+        case 0x08: return "Base Systems Peripheral";
+        case 0x09: return "Input Device";
+        case 0x0A: return "Docking Station";
+        case 0x0B: return "Processor";
+        case 0x0C: return "Serial Bus Controller";
+        case 0x0D: return "Wireless Controller";
+        case 0x0E: return "Intelligent Controller";
+        case 0x0F: return "Satellite Communication Controller";
+        case 0x10: return "Encryption/Decryption Controller";
+        case 0x11: return "Data Acquisition Controller";
+        case 0xFF: return "Unknown Device";
+        default: return QString("Class 0x%1").arg(classCode, 2, 16, QChar('0')).toUpper();
+    }
+}
+
+QString PCIWidget_GiveIO::getSubClassString(quint8 classCode, quint8 subClass)
+{
+    switch (classCode) {
+        case 0x01: // Mass Storage
+            switch (subClass) {
+                case 0x00: return "SCSI";
+                case 0x01: return "IDE";
+                case 0x02: return "Floppy";
+                case 0x03: return "IPI";
+                case 0x04: return "RAID";
+                case 0x05: return "ATA Controller";
+                case 0x06: return "Serial ATA Controller";
+                case 0x07: return "Serial Attached SCSI Controller";
+                case 0x08: return "Non-Volatile Memory (NVMe)";
+                case 0x80: return "Other";
+                default: return QString("Storage 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        case 0x02: // Network
+            switch (subClass) {
+                case 0x00: return "Ethernet/WiFi";
+                case 0x01: return "Token Ring";
+                case 0x02: return "FDDI";
+                case 0x03: return "ATM";
+                case 0x80: return "Other";
+                default: return QString("Network 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        case 0x03: // Display
+            switch (subClass) {
+                case 0x00: return "VGA Compatible";
+                case 0x01: return "XGA";
+                case 0x02: return "3D Graphics";
+                case 0x80: return "Other";
+                default: return QString("Display 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        case 0x04: // Multimedia
+            switch (subClass) {
+                case 0x00: return "Video Controller";
+                case 0x01: return "Audio Controller";
+                case 0x02: return "Telephony Controller";
+                case 0x03: return "Audio Device";
+                case 0x80: return "Other";
+                default: return QString("Multimedia 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        case 0x05: // Memory
+            switch (subClass) {
+                case 0x00: return "RAM";
+                case 0x01: return "Flash";
+                case 0x80: return "Other";
+                default: return QString("Memory 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        case 0x06: // Bridge
+            switch (subClass) {
+                case 0x00: return "Host/PCI";
+                case 0x01: return "PCI/ISA";
+                case 0x02: return "PCI/EISA";
+                case 0x03: return "PCI/Micro Channel";
+                case 0x04: return "PCI/PCI";
+                case 0x05: return "PCI/PCMCIA";
+                case 0x06: return "PCI/NuBus";
+                case 0x07: return "PCI/CardBus";
+                case 0x08: return "PCI/RACEway";
+                case 0x09: return "PCI/PCI";
+                case 0x0A: return "PCI/InfiniBand";
+                case 0x80: return "Other";
+                default: return QString("Bridge 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        case 0x0C: // Serial Bus
+            switch (subClass) {
+                case 0x00: return "Firewire (IEEE 1394)";
+                case 0x01: return "ACCESS.bus";
+                case 0x02: return "SSA (Serial Storage Archetecture)";
+                case 0x03: return "USB Controller";
+                case 0x04: return "Fibre Channel";
+                case 0x05: return "SMbus";
+                case 0x06: return "InfiniBand";
+                case 0x07: return "IPMI (SMIC)";
+                case 0x08: return "SERCOS";
+                case 0x80: return "Other";
+                default: return QString("Serial 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
+        default:
+            return QString("SubClass 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+    }
+}
+
+QString PCIWidget_GiveIO::getProgIFString(quint8 classCode, quint8 subClass, quint8 progIF)
+{
+    // USB Programming Interface
+    if (classCode == 0x0C && subClass == 0x03) {
+        switch (progIF) {
+            case 0x00: return "USB 1.1 UHCI";
+            case 0x10: return "USB 1.1 OHCI";
+            case 0x20: return "USB 2.0 EHCI";
+            case 0x30: return "USB 3.0 XHCI";
+            case 0xFE: return "USB Device";
+            default: return QString("USB 0x%1").arg(progIF, 2, 16, QChar('0')).toUpper();
+        }
+    }
+    
+    // SATA Programming Interface
+    if (classCode == 0x01 && subClass == 0x06) {
+        switch (progIF) {
+            case 0x00: return "Vendor Specific";
+            case 0x01: return "AHCI 1.0";
+            case 0x02: return "Serial Storage Bus";
+            default: return QString("SATA 0x%1").arg(progIF, 2, 16, QChar('0')).toUpper();
+        }
+    }
+    
+    // Display VGA Programming Interface
+    if (classCode == 0x03 && subClass == 0x00) {
+        switch (progIF) {
+            case 0x00: return "VGA";
+            case 0x01: return "8514";
+            default: return QString("VGA 0x%1").arg(progIF, 2, 16, QChar('0')).toUpper();
+        }
+    }
+    
+    return QString("0x%1").arg(progIF, 2, 16, QChar('0')).toUpper();
 }
 
 QString PCIWidget_GiveIO::getVendorName(quint16 vendorID)
@@ -521,13 +784,48 @@ void PCIWidget_GiveIO::addDeviceToTable(const PCI_Device &pciDevice)
     int row = tableWidget->rowCount();
     tableWidget->insertRow(row);
 
-    tableWidget->setItem(row, 0, new QTableWidgetItem(QString("0x%1").arg(pciDevice.bus, 2, 16, QChar('0')).toUpper()));
-    tableWidget->setItem(row, 1, new QTableWidgetItem(QString("0x%1").arg(pciDevice.device, 2, 16, QChar('0')).toUpper()));
-    tableWidget->setItem(row, 2, new QTableWidgetItem(QString("0x%1").arg(pciDevice.function, 1, 16, QChar('0')).toUpper()));
-    tableWidget->setItem(row, 3, new QTableWidgetItem(QString("0x%1").arg(pciDevice.vendorID, 4, 16, QChar('0')).toUpper()));
-    tableWidget->setItem(row, 4, new QTableWidgetItem(QString("0x%1").arg(pciDevice.deviceID, 4, 16, QChar('0')).toUpper()));
+    // Основная информация
+    QTableWidgetItem *busItem = new QTableWidgetItem(QString("0x%1").arg(pciDevice.bus, 2, 16, QChar('0')).toUpper());
+    busItem->setTextAlignment(Qt::AlignCenter);
+    tableWidget->setItem(row, 0, busItem);
+    
+    QTableWidgetItem *deviceItem = new QTableWidgetItem(QString("0x%1").arg(pciDevice.device, 2, 16, QChar('0')).toUpper());
+    deviceItem->setTextAlignment(Qt::AlignCenter);
+    tableWidget->setItem(row, 1, deviceItem);
+    
+    QTableWidgetItem *funcItem = new QTableWidgetItem(QString("0x%1").arg(pciDevice.function, 1, 16, QChar('0')).toUpper());
+    funcItem->setTextAlignment(Qt::AlignCenter);
+    tableWidget->setItem(row, 2, funcItem);
+    
+    QTableWidgetItem *vidItem = new QTableWidgetItem(QString("0x%1").arg(pciDevice.vendorID, 4, 16, QChar('0')).toUpper());
+    vidItem->setTextAlignment(Qt::AlignCenter);
+    tableWidget->setItem(row, 3, vidItem);
+    
+    QTableWidgetItem *didItem = new QTableWidgetItem(QString("0x%1").arg(pciDevice.deviceID, 4, 16, QChar('0')).toUpper());
+    didItem->setTextAlignment(Qt::AlignCenter);
+    tableWidget->setItem(row, 4, didItem);
+    
     tableWidget->setItem(row, 5, new QTableWidgetItem(pciDevice.vendorName));
     tableWidget->setItem(row, 6, new QTableWidgetItem(pciDevice.deviceName));
+    
+    // Новые колонки с классификацией
+    QTableWidgetItem *classItem = new QTableWidgetItem(getClassString(pciDevice.classCode));
+    classItem->setToolTip(QString("Class Code: 0x%1").arg(pciDevice.classCode, 2, 16, QChar('0')).toUpper());
+    tableWidget->setItem(row, 7, classItem);
+    
+    QTableWidgetItem *subClassItem = new QTableWidgetItem(getSubClassString(pciDevice.classCode, pciDevice.subClass));
+    subClassItem->setToolTip(QString("SubClass: 0x%1").arg(pciDevice.subClass, 2, 16, QChar('0')).toUpper());
+    tableWidget->setItem(row, 8, subClassItem);
+    
+    QTableWidgetItem *progIFItem = new QTableWidgetItem(getProgIFString(pciDevice.classCode, pciDevice.subClass, pciDevice.progIF));
+    progIFItem->setTextAlignment(Qt::AlignCenter);
+    progIFItem->setToolTip("Programming Interface");
+    tableWidget->setItem(row, 9, progIFItem);
+    
+    QTableWidgetItem *headerItem = new QTableWidgetItem(QString("0x%1").arg(pciDevice.headerType, 2, 16, QChar('0')).toUpper());
+    headerItem->setTextAlignment(Qt::AlignCenter);
+    headerItem->setToolTip("Header Type");
+    tableWidget->setItem(row, 10, headerItem);
 }
 
 void PCIWidget_GiveIO::scanPCI()
