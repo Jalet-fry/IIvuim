@@ -1,6 +1,6 @@
 #include "mainwindow.h"
 #include "Lab1/batterywidget.h"
-#include "Lab2/pciwidget.h"
+#include "Lab2/pciwidget_giveio.h"
 #include "Animation/jakewidget_xp.h"
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -197,7 +197,7 @@ void MainWindow::openLab2() {
     
     // Создаем новое окно если его нет или оно скрыто
     if (!pciWidget) {
-        pciWidget = new PCIWidget(nullptr); // nullptr для отдельного окна
+        pciWidget = new PCIWidget_GiveIO(nullptr); // nullptr для отдельного окна
     }
     
     // Показываем окно

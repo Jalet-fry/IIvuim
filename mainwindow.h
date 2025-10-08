@@ -4,7 +4,7 @@
 #include <QMainWindow>
 
 class BatteryWidget;
-class PCIWidget;
+class PCIWidget_GiveIO;
 class JakeWidget_XP;
 
 class MainWindow : public QMainWindow
@@ -28,7 +28,7 @@ private slots:
 
 private:
     BatteryWidget *batteryWidget;
-    PCIWidget *pciWidget;
+    PCIWidget_GiveIO *pciWidget;
     JakeWidget_XP *jakeWidget;
     void setupJake();
     bool isHoveringButton;
