@@ -1,3 +1,5 @@
+*.rar
+*.iso
 # Qt generated files
 *.pro.user
 *.pro.user.*
@@ -99,8 +101,3 @@ cmake_install.cmake
 # Backup files
 *.bak
 *.orig
-
-*.txt
-*.jpg
-*.png
-*.gif

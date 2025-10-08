@@ -5,6 +5,7 @@
 
 class BatteryWidget;
 class JakeWidget;
+class StorageWindow;
 
 class MainWindow : public QMainWindow
 {
@@ -28,6 +29,7 @@ private slots:
 private:
     BatteryWidget *batteryWidget;
     JakeWidget *jakeWidget;
+    StorageWindow *storageWindow;
     void setupJake();
     bool isHoveringButton;
 };

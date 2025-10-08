@@ -16,15 +16,19 @@ CONFIG += c++11
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
-    batterywidget.cpp \
-    batteryworker.cpp \
-    jakewidget.cpp
+    Lab1/batterywidget.cpp \
+    Lab1/batteryworker.cpp \
+    Lab3/storagescanner.cpp \
+    Lab3/storagewindow.cpp \
+    Animation/jakewidget.cpp
 
 HEADERS += \
     mainwindow.h \
-    batterywidget.h \
-    batteryworker.h \
-    jakewidget.h
+    Lab1/batterywidget.h \
+    Lab1/batteryworker.h \
+    Lab3/storagescanner.h \
+    Lab3/storagewindow.h \
+    Animation/jakewidget.h
 
 FORMS += \
     mainwindow.ui
@@ -32,4 +36,4 @@ FORMS += \
 RESOURCES += \
     resources.qrc
 
-win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi
+win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid

@@ -1,6 +1,7 @@
 #include "mainwindow.h"
-#include "batterywidget.h"
-#include "jakewidget.h"
+#include "Lab1/batterywidget.h"
+#include "Lab3/storagewindow.h"
+#include "Animation/jakewidget.h"
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -11,7 +12,7 @@
 #include <QHoverEvent>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), isHoveringButton(false)
+    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), storageWindow(nullptr), isHoveringButton(false)
 {
     setWindowTitle("Лабораторные работы");
     setFixedSize(1200, 700);
@@ -121,6 +122,10 @@ MainWindow::~MainWindow()
         batteryWidget->close();
         delete batteryWidget;
     }
+    if (storageWindow) {
+        storageWindow->close();
+        delete storageWindow;
+    }
     if (jakeWidget) {
         jakeWidget->close();
         delete jakeWidget;
@@ -172,7 +177,9 @@ void MainWindow::openLab2() {
 }
 
 void MainWindow::openLab3() {
-    QMessageBox::information(this, "ЛР 3", "Открываем лабораторную работу 3");
+    StorageWindow *storageWin = new StorageWindow(nullptr);
+    storageWin->show();
+    
     if (jakeWidget) {
         jakeWidget->onButtonClick();
     }

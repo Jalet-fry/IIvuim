@@ -66,7 +66,7 @@ void JakeWidget::setState(JakeState state)
     currentState = state;
     
     if (state == JakeState::Idle) {
-        ensureMovie(":/Jake.gif");
+        ensureMovie(":/Animation/Jake.gif");
         if (movie) {
             movie->setSpeed(100);
             movie->start(); // Убеждаемся что гифка запущена
@@ -81,7 +81,7 @@ void JakeWidget::setState(JakeState state)
         scaleAnimation->start();
         
     } else if (state == JakeState::Hover) {
-        ensureMovie(":/Jake.gif");
+        ensureMovie(":/Animation/Jake.gif");
         if (movie) {
             movie->setSpeed(150);
             movie->start(); // Убеждаемся что гифка запущена
@@ -151,7 +151,7 @@ void JakeWidget::setState(JakeState state)
         
     } else if (state == JakeState::ButtonHover) {
         // Показываем гифку при наведении на кнопку
-        ensureMovie(":/Jake.gif");
+        ensureMovie(":/Animation/Jake.gif");
         if (movie) {
             qDebug() << "ButtonHover: Movie loaded, isValid:" << movie->isValid() << "frameCount:" << movie->frameCount();
             movie->setSpeed(120);
