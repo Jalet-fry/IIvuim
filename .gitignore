@@ -1,3 +1,4 @@
+/IceKingLabs/
 # Qt generated files
 *.pro.user
 *.pro.user.*
@@ -100,7 +101,6 @@ cmake_install.cmake
 *.bak
 *.orig
 
-*.txt
 *.jpg
 *.png
 *.gif

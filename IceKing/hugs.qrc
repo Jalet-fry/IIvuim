@@ -1,0 +1,22 @@
+<RCC>
+    <qresource prefix="/hugs">
+        <file>img/hugs_1.png</file>
+        <file>img/hugs_2.png</file>
+        <file>img/hugs_3.png</file>
+        <file>img/hugs_4.png</file>
+        <file>img/hugs_5.png</file>
+        <file>img/hugs_6.png</file>
+        <file>img/hugs_7.png</file>
+        <file>img/hugs_8.png</file>
+        <file>img/hugs_9.png</file>
+        <file>img/hugs_10.png</file>
+        <file>img/hugs_11.png</file>
+        <file>img/hugs_12.png</file>
+        <file>img/hugs_13.png</file>
+        <file>img/hugs_14.png</file>
+        <file>img/hugs_15.png</file>
+        <file>img/hugs_16.png</file>
+        <file>img/hugs_17.png</file>
+        <file>img/hugs_18.png</file>
+    </qresource>
+</RCC>

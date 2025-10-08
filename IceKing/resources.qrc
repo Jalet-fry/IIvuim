@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file>img/ik-ic.ico</file>
+    </qresource>
+</RCC>

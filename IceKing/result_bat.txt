@@ -1,0 +1,142 @@
+Microsoft Windows XP [Версия 5.1.2600]
+(С) Корпорация Майкрософт, 1985-2001.
+
+C:\Documents and Settings\Администратор>йьфлу -м
+"йьфлу" не является внутренней или внешней
+командой, исполняемой программой или пакетным файлом.
+
+C:\Documents and Settings\Администратор>qmake -v
+QMake version 3.0
+Using Qt version 5.5.1 in C:/Qt/Qt5.5.1/5.5/mingw492_32/lib
+
+C:\Documents and Settings\Администратор>cd C:\VM-shared\Common\IIvuim\IceKing
+Системе не удается найти указанный путь.
+
+C:\Documents and Settings\Администратор>Z:
+
+Z:\>dir
+ Том в устройстве Z имеет метку VBOX_Common
+ Серийный номер тома: 4AD7-5606
+
+ Содержимое папки Z:\
+
+08.10.2025  15:25    <DIR>          .
+05.10.2025  18:32    <DIR>          ..
+07.10.2025  09:09    <DIR>          build-test_minimal-Desktop_Qt_5_5_1_MinGW_32
+bit-Debug
+07.10.2025  09:40    <DIR>          build-XP_BASE_TEST-Desktop_Qt_5_5_1_MinGW_32
+bit-Debug
+07.10.2025  14:35    <DIR>          drivers_lab2
+08.10.2025  15:14    <DIR>          IIvuim
+13.09.2025  10:04     1 045 991 056 qt-opensource-windows-x86-mingw492-5.5.1.exe
+
+08.10.2025  15:25         2 080 768 qt-opensource-windows-x86-msvc2010-5.5.1.exe
+.opdownload
+07.10.2025  09:54         8 993 744 vcredist_x86 2010.exe
+04.10.2025  17:11         6 510 136 vcredist_x86.exe
+07.10.2025  22:22    <DIR>          XP_BASE_TEST
+               4 файлов  1 063 575 704 байт
+               7 папок  48 783 986 688 байт свободно
+
+Z:\>cd IIvuim\IceKing
+
+Z:\IIvuim\IceKing>dir
+ Том в устройстве Z имеет метку VBOX_Common
+ Серийный номер тома: 4AD7-5606
+
+ Содержимое папки Z:\IIvuim\IceKing
+
+08.10.2025  15:26    <DIR>          .
+08.10.2025  15:14    <DIR>          ..
+15.02.2009  14:21           365 589 (PCI_DEVS)pci_codes.h
+08.10.2025  15:23             7 222 BUILD_INSTRUCTIONS_RU.md
+08.10.2025  15:23             5 653 build_xp.bat
+08.10.2025  15:27             6 170 check_qt_compiler.bat
+08.10.2025  15:23            10 016 COMPILER_ISSUES_GUIDE.md
+08.10.2025  14:43    <DIR>          debug
+06.10.2025  23:51               830 drums.qrc
+31.10.2007  11:26             6 272 HexIO.sys
+05.10.2025  19:44             1 136 hexioctrl.h
+27.11.2007  16:19            41 828 hexiosupp.lib
+06.10.2025  23:46               718 hugs.qrc
+06.10.2025  23:49               712 IceKing.pro
+08.10.2025  15:14            18 577 IceKing.pro.user
+07.10.2025  16:08            24 021 IceKing.pro.user.2.6pre1
+08.10.2025  14:43    <DIR>          img
+08.10.2025  15:27            12 900 INSTALLATION_OPTIONS_RU.md
+06.10.2025  12:13             2 420 lost.qrc
+06.10.2025  09:32               185 main.cpp
+07.10.2025  15:43            15 238 mainWindow.cpp
+06.10.2025  12:22             2 101 mainWindow.h
+07.10.2025  15:56            19 794 Makefile
+07.10.2025  15:56            70 319 Makefile.Debug
+07.10.2025  15:56            69 510 Makefile.Release
+01.07.2019  12:41           422 040 msvcp100.dll
+01.07.2019  12:44           774 808 msvcr100.dll
+07.10.2025  16:19            11 031 pciwindow.cpp
+06.10.2025  09:39             1 845 pciwindow.h
+06.10.2025  11:04               889 power.qrc
+08.10.2025  15:23            20 829 QUICK_REFERENCE_RU.txt
+08.10.2025  15:23             7 286 README.md
+08.10.2025  14:43    <DIR>          release
+06.10.2025  23:49                92 resources.qrc
+03.10.2025  22:14            10 431 storagewindow.cpp
+03.10.2025  22:15               816 storagewindow.h
+08.10.2025  15:23            19 960 ИТОГОВОЕ_РЕЗЮМЕ.txt
+              32 файлов      1 951 238 байт
+               5 папок  48 782 999 552 байт свободно
+
+Z:\IIvuim\IceKing>check_qt_compiler.bat
+============================================
+Qt Compiler Detection Tool
+============================================
+
+[INFO] Searching for Qt installations...
+[FOUND] Qt 5.5.1 MinGW: C:\Qt\Qt5.5.1\5.5\mingw492_32\
+
+============================================
+Checking current project configuration
+============================================
+
+[INFO] Found Makefile, checking compiler...
+[UNKNOWN] Cannot determine compiler from Makefile
+
+============================================
+Checking for MSVC compilers
+============================================
+
+[NOT FOUND] Visual Studio 2010
+
+============================================
+Checking for MinGW
+============================================
+
+[NOT FOUND] MinGW g++ not in PATH
+[FOUND] MinGW in Qt installation: C:\Qt\Qt5.5.1\Tools\mingw492_32\
+
+============================================
+Quick Check Results
+============================================
+
+Installed components:
+  [-] Visual Studio 2010 compiler NOT FOUND
+  [-] Qt for MSVC 2010 NOT FOUND
+  [-] MinGW compiler NOT FOUND
+  [+] Qt for MinGW
+
+============================================
+Recommendations for IceKing project:
+============================================
+
+[MISSING] Visual Studio 2010 not found
+[ACTION] Install Visual Studio 2010 (Express or Professional)
+[ACTION] Then install Qt 5.5.1 for MSVC 2010
+
+============================================
+For IceKing project you NEED:
+  1. Visual Studio 2010 (any edition)
+  2. Qt 5.5.1 for MSVC 2010 (32-bit)
+
+You CANNOT use MinGW because hexiosupp.lib
+is compiled with MSVC and is incompatible!
+============================================

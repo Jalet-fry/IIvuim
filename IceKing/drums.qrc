@@ -1,0 +1,25 @@
+<RCC>
+    <qresource prefix="/drums">
+        <file>img/drum_1.png</file>
+        <file>img/drum_2.png</file>
+        <file>img/drum_3.png</file>
+        <file>img/drum_4.png</file>
+        <file>img/drum_5.png</file>
+        <file>img/drum_6.png</file>
+        <file>img/drum_7.png</file>
+        <file>img/drum_8.png</file>
+        <file>img/drum_9.png</file>
+        <file>img/drum_10.png</file>
+        <file>img/drum_11.png</file>
+        <file>img/drum_12.png</file>
+        <file>img/drum_13.png</file>
+        <file>img/drum_14.png</file>
+        <file>img/drum_15.png</file>
+        <file>img/drum_16.png</file>
+        <file>img/drum_17.png</file>
+        <file>img/drum_18.png</file>
+        <file>img/drum_19.png</file>
+        <file>img/drum_20.png</file>
+        <file>img/drum_21.png</file>
+    </qresource>
+</RCC>
