@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="/">
         <file>Animation/Jake.gif</file>
+        <file>Animation/jake with cicrle.gif</file>
     </qresource>
     <qresource prefix="/assets">
         <file>Animation/assets/jake_base.gif</file>

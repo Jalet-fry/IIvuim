@@ -12,6 +12,8 @@ PCIWidget_GiveIO::PCIWidget_GiveIO(QWidget *parent) :
     progressBar(nullptr),
     logTextEdit(nullptr),
     mainSplitter(nullptr),
+    jakeAnimationLabel(nullptr),
+    jakeAnimation(nullptr),
     giveioHandle(INVALID_HANDLE_VALUE),
     giveioInitialized(false)
 {
@@ -28,23 +30,105 @@ PCIWidget_GiveIO::PCIWidget_GiveIO(QWidget *parent) :
 PCIWidget_GiveIO::~PCIWidget_GiveIO()
 {
     shutdownGiveIO();
+    
+    if (jakeAnimation) {
+        jakeAnimation->stop();
+        delete jakeAnimation;
+    }
 }
 
 void PCIWidget_GiveIO::initializeUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
+    mainLayout->setSpacing(12);
+    mainLayout->setContentsMargins(15, 15, 15, 15);
 
-    // Кнопки
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    scanButton = new QPushButton("Сканировать PCI устройства", this);
-    clearButton = new QPushButton("Очистить лог", this);
+    // Верхняя панель с кнопками и анимацией
+    QHBoxLayout *topLayout = new QHBoxLayout();
+    topLayout->setSpacing(10);
+
+    // Jake анимация (слева)
+    jakeAnimationLabel = new QLabel(this);
+    jakeAnimationLabel->setFixedSize(120, 120);
+    jakeAnimationLabel->setAlignment(Qt::AlignCenter);
+    jakeAnimationLabel->setStyleSheet("background-color: white; border: 2px solid #4A90E2; border-radius: 8px;");
+    jakeAnimation = new QMovie(":/Animation/jake with cicrle.gif");
+    jakeAnimationLabel->setMovie(jakeAnimation);
+    jakeAnimationLabel->setScaledContents(true);
+    jakeAnimationLabel->setVisible(false);
+    topLayout->addWidget(jakeAnimationLabel);
+
+    // Кнопки (справа от анимации)
+    QVBoxLayout *buttonLayout = new QVBoxLayout();
+    buttonLayout->setSpacing(8);
+    
+    scanButton = new QPushButton("🔍 Сканировать PCI устройства", this);
+    scanButton->setMinimumHeight(50);
+    scanButton->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #4A90E2;"
+        "    color: white;"
+        "    border: none;"
+        "    border-radius: 8px;"
+        "    font-size: 14px;"
+        "    font-weight: bold;"
+        "    padding: 10px 20px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #357ABD;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #2E6BA8;"
+        "}"
+    );
+    
+    clearButton = new QPushButton("🗑️ Очистить лог", this);
+    clearButton->setMinimumHeight(40);
+    clearButton->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #E8F4F8;"
+        "    color: #4A90E2;"
+        "    border: 2px solid #4A90E2;"
+        "    border-radius: 8px;"
+        "    font-size: 12px;"
+        "    font-weight: bold;"
+        "    padding: 8px 20px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #D0E9F5;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #B8DDF0;"
+        "}"
+    );
+    
     buttonLayout->addWidget(scanButton);
     buttonLayout->addWidget(clearButton);
-    mainLayout->addLayout(buttonLayout);
+    buttonLayout->addStretch();
+    
+    topLayout->addLayout(buttonLayout);
+    topLayout->addStretch();
+    
+    mainLayout->addLayout(topLayout);
 
     // Прогресс бар
     progressBar = new QProgressBar(this);
     progressBar->setVisible(false);
+    progressBar->setMinimumHeight(25);
+    progressBar->setStyleSheet(
+        "QProgressBar {"
+        "    border: 2px solid #4A90E2;"
+        "    border-radius: 8px;"
+        "    text-align: center;"
+        "    background-color: white;"
+        "    color: #333;"
+        "    font-weight: bold;"
+        "}"
+        "QProgressBar::chunk {"
+        "    background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4A90E2, stop:1 #67B8F7);"
+        "    border-radius: 6px;"
+        "}"
+    );
     mainLayout->addWidget(progressBar);
 
     // Сплиттер для таблицы и лога
@@ -59,13 +143,54 @@ void PCIWidget_GiveIO::initializeUI()
     tableWidget->setHorizontalHeaderLabels(headers);
     tableWidget->horizontalHeader()->setStretchLastSection(true);
     tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
+    tableWidget->setAlternatingRowColors(true);
+    tableWidget->setStyleSheet(
+        "QTableWidget {"
+        "    background-color: white;"
+        "    alternate-background-color: #F5F9FC;"
+        "    border: 2px solid #4A90E2;"
+        "    border-radius: 8px;"
+        "    gridline-color: #E0E0E0;"
+        "}"
+        "QTableWidget::item {"
+        "    padding: 5px;"
+        "}"
+        "QTableWidget::item:selected {"
+        "    background-color: #4A90E2;"
+        "    color: white;"
+        "}"
+        "QHeaderView::section {"
+        "    background-color: #4A90E2;"
+        "    color: white;"
+        "    padding: 8px;"
+        "    border: none;"
+        "    font-weight: bold;"
+        "}"
+    );
     mainSplitter->addWidget(tableWidget);
 
     // Лог
     logTextEdit = new QTextEdit(this);
     logTextEdit->setMaximumHeight(200);
     logTextEdit->setReadOnly(true);
+    logTextEdit->setStyleSheet(
+        "QTextEdit {"
+        "    background-color: white;"
+        "    border: 2px solid #4A90E2;"
+        "    border-radius: 8px;"
+        "    padding: 8px;"
+        "    font-family: 'Consolas', 'Courier New', monospace;"
+        "    font-size: 11px;"
+        "}"
+    );
     mainSplitter->addWidget(logTextEdit);
+
+    // Общий стиль для виджета
+    setStyleSheet(
+        "QWidget {"
+        "    background-color: #F8FBFD;"
+        "}"
+    );
 
     // Подключаем сигналы
     connect(scanButton, SIGNAL(clicked()), this, SLOT(scanPCI_devices()));
@@ -269,6 +394,10 @@ bool PCIWidget_GiveIO::scanPCI_GiveIO()
 {
     logMessage("=== НАЧАЛО СКАНИРОВАНИЯ PCI ЧЕРЕЗ GiveIO ===");
 
+    // Показываем анимацию Jake и запускаем её
+    jakeAnimationLabel->setVisible(true);
+    jakeAnimation->start();
+
     int foundDevices = 0;
     progressBar->setRange(0, 255);
     progressBar->setValue(0);
@@ -330,6 +459,11 @@ bool PCIWidget_GiveIO::scanPCI_GiveIO()
 
     progressBar->setValue(255);
     progressBar->setVisible(false);
+    
+    // Скрываем анимацию Jake и останавливаем её
+    jakeAnimation->stop();
+    jakeAnimationLabel->setVisible(false);
+    
     logMessage(QString("Сканирование завершено. Найдено устройств: %1").arg(foundDevices));
 
     return foundDevices > 0;

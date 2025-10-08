@@ -12,6 +12,8 @@
 #include <QTextEdit>
 #include <QSplitter>
 #include <QMap>
+#include <QLabel>
+#include <QMovie>
 #include <windows.h>
 
 struct PCI_Device {
@@ -45,6 +47,8 @@ private:
     QProgressBar *progressBar;
     QTextEdit *logTextEdit;
     QSplitter *mainSplitter;
+    QLabel *jakeAnimationLabel;
+    QMovie *jakeAnimation;
 
     void initializeUI();
     void scanPCI();
