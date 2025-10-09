@@ -19,77 +19,84 @@ StorageWindow::~StorageWindow() {
 }
 
 void StorageWindow::setupUI() {
-    setWindowTitle("Лабораторная работа №3 - Устройства хранения данных");
-    setMinimumSize(1200, 750);
+    setWindowTitle("Лабораторная работа №3 - Анализатор устройств хранения данных");
+    setMinimumSize(1300, 800);
     setStyleSheet(R"(
         QWidget {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                stop:0 #f0f4f8, stop:0.5 #e8eef5, stop:1 #f5f7fa);
+                stop:0 #0f2027, stop:0.5 #203a43, stop:1 #2c5364);
             font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
         }
         QGroupBox {
-            border: 2px solid #607D8B;
-            border-radius: 10px;
-            margin-top: 18px;
-            padding-top: 18px;
+            border: 2px solid #4dd0e1;
+            border-radius: 12px;
+            margin-top: 20px;
+            padding-top: 20px;
             font-weight: bold;
             font-size: 13px;
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 rgba(255, 255, 255, 0.95), stop:1 rgba(250, 250, 252, 0.95));
+                stop:0 rgba(38, 50, 56, 0.95), stop:1 rgba(55, 71, 79, 0.95));
         }
         QGroupBox::title {
             subcontrol-origin: margin;
             left: 20px;
-            padding: 6px 15px;
+            padding: 8px 20px;
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #546E7A, stop:1 #37474F);
+                stop:0 #00bcd4, stop:0.5 #0097a7, stop:1 #006064);
             color: white;
-            border-radius: 6px;
+            border-radius: 8px;
             font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         QTableWidget {
-            background-color: white;
-            alternate-background-color: #f8f9fa;
-            gridline-color: #e0e0e0;
-            border: 2px solid #90A4AE;
-            border-radius: 6px;
-            selection-background-color: #546E7A;
+            background-color: rgba(38, 50, 56, 0.9);
+            alternate-background-color: rgba(55, 71, 79, 0.7);
+            gridline-color: #4dd0e1;
+            border: 2px solid #00bcd4;
+            border-radius: 8px;
+            selection-background-color: #0097a7;
+            color: #e0f7fa;
         }
         QTableWidget::item {
-            padding: 10px;
+            padding: 12px;
             font-weight: 600;
-            color: #263238;
+            color: #e0f7fa;
+            border-bottom: 1px solid rgba(77, 208, 225, 0.3);
         }
         QTableWidget::item:selected {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #546E7A, stop:1 #455A64);
+                stop:0 #00acc1, stop:0.5 #0097a7, stop:1 #00838f);
             color: white;
+            font-weight: bold;
         }
         QTableWidget::item:hover {
-            background: #eceff1;
+            background: rgba(77, 208, 225, 0.2);
         }
         QHeaderView::section {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                stop:0 #546E7A, stop:1 #37474F);
+                stop:0 #00bcd4, stop:0.5 #0097a7, stop:1 #006064);
             color: white;
-            padding: 10px;
-            border: 1px solid #455A64;
+            padding: 12px;
+            border: 1px solid #0097a7;
             font-weight: bold;
             font-size: 12px;
             text-transform: uppercase;
+            letter-spacing: 1px;
         }
         QTextEdit {
-            background-color: white;
-            border: 2px solid #78909C;
-            border-radius: 6px;
-            padding: 12px;
+            background-color: rgba(38, 50, 56, 0.95);
+            border: 2px solid #00bcd4;
+            border-radius: 8px;
+            padding: 15px;
             font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 11px;
-            color: #263238;
-            line-height: 1.5;
+            font-size: 12px;
+            color: #e0f7fa;
+            line-height: 1.6;
         }
         QLabel {
-            color: #37474F;
+            color: #e0f7fa;
         }
     )");
     
@@ -97,39 +104,53 @@ void StorageWindow::setupUI() {
     mainLayout->setContentsMargins(25, 25, 25, 25);
     mainLayout->setSpacing(15);
     
-    // Title section
+    // Title section with enhanced design
     QWidget *headerWidget = new QWidget();
     headerWidget->setStyleSheet(R"(
         QWidget {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #546E7A, stop:1 #37474F);
-            border-radius: 10px;
-            padding: 15px;
+                stop:0 #00bcd4, stop:0.5 #0097a7, stop:1 #006064);
+            border-radius: 12px;
+            padding: 20px;
+            border: 2px solid #4dd0e1;
         }
     )");
     QVBoxLayout *headerLayout = new QVBoxLayout(headerWidget);
     
-    QLabel *titleLabel = new QLabel("СКАНЕР УСТРОЙСТВ ХРАНЕНИЯ ДАННЫХ");
-    titleLabel->setStyleSheet("font-size: 24px; font-weight: bold; color: white; padding: 10px;");
+    QLabel *titleLabel = new QLabel("⚡ АНАЛИЗАТОР УСТРОЙСТВ ХРАНЕНИЯ ⚡");
+    titleLabel->setStyleSheet(R"(
+        font-size: 28px; 
+        font-weight: bold; 
+        color: white; 
+        padding: 12px;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        letter-spacing: 2px;
+    )");
     titleLabel->setAlignment(Qt::AlignCenter);
     headerLayout->addWidget(titleLabel);
     
-    QLabel *subtitleLabel = new QLabel("Анализ накопителей HDD/SSD через WMI интерфейс Windows");
-    subtitleLabel->setStyleSheet("font-size: 12px; color: #B0BEC5; padding: 0px;");
+    QLabel *subtitleLabel = new QLabel("● Профессиональный анализ накопителей HDD/SSD/NVMe через WMI интерфейс Windows ●");
+    subtitleLabel->setStyleSheet(R"(
+        font-size: 13px; 
+        color: #e0f7fa; 
+        padding: 5px;
+        font-weight: 600;
+    )");
     subtitleLabel->setAlignment(Qt::AlignCenter);
     headerLayout->addWidget(subtitleLabel);
     
     mainLayout->addWidget(headerWidget);
     
-    m_statusLabel = new QLabel("Готов к сканированию");
+    m_statusLabel = new QLabel("⚙ Готов к сканированию накопителей...");
     m_statusLabel->setStyleSheet(R"(
-        font-size: 13px; 
-        color: #1B5E20; 
+        font-size: 14px; 
+        color: #00e676; 
         font-weight: bold; 
-        padding: 8px 15px;
-        background: #E8F5E9;
-        border-radius: 5px;
-        border-left: 4px solid #4CAF50;
+        padding: 10px 20px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 rgba(0, 150, 136, 0.3), stop:1 rgba(0, 200, 83, 0.3));
+        border-radius: 6px;
+        border: 2px solid #00e676;
     )");
     m_statusLabel->setAlignment(Qt::AlignCenter);
     mainLayout->addWidget(m_statusLabel);
@@ -137,6 +158,36 @@ void StorageWindow::setupUI() {
     QGroupBox *tableGroup = new QGroupBox("Обнаруженные накопители");
     QVBoxLayout *tableLayout = new QVBoxLayout(tableGroup);
     tableLayout->setContentsMargins(10, 20, 10, 10);
+    
+    // Add refresh button
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    QPushButton *refreshButton = new QPushButton("🔄 Обновить список накопителей");
+    refreshButton->setStyleSheet(R"(
+        QPushButton {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #00bcd4, stop:1 #0097a7);
+            color: white;
+            border: 2px solid #4dd0e1;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 13px;
+            font-weight: bold;
+            min-width: 200px;
+        }
+        QPushButton:hover {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #00acc1, stop:1 #00838f);
+            border: 2px solid #00e5ff;
+        }
+        QPushButton:pressed {
+            background: #006064;
+        }
+    )");
+    connect(refreshButton, &QPushButton::clicked, this, &StorageWindow::refreshDevices);
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(refreshButton);
+    buttonLayout->addStretch();
+    tableLayout->addLayout(buttonLayout);
     
     m_diskTable = new QTableWidget();
     m_diskTable->setColumnCount(8);
@@ -163,35 +214,41 @@ void StorageWindow::setupUI() {
     
     m_detailsText = new QTextEdit();
     m_detailsText->setReadOnly(true);
-    m_detailsText->setPlainText("Выберите накопитель из таблицы для просмотра детальной информации...");
+    m_detailsText->setPlainText("┌──────────────────────────────────────────────────────────────┐\n"
+                                 "│  Выберите накопитель из таблицы для просмотра детальной      │\n"
+                                 "│  информации о устройстве, включая характеристики,            │\n"
+                                 "│  объем памяти и поддерживаемые режимы работы...              │\n"
+                                 "└──────────────────────────────────────────────────────────────┘");
     detailsLayout->addWidget(m_detailsText);
     
     mainLayout->addWidget(detailsGroup, 1);
 }
 
 void StorageWindow::scanDevices() {
-    m_statusLabel->setText("Сканирование накопителей...");
+    m_statusLabel->setText("⏳ Сканирование накопителей...");
     m_statusLabel->setStyleSheet(R"(
-        font-size: 13px; 
-        color: #E65100; 
+        font-size: 14px; 
+        color: #ffa726; 
         font-weight: bold; 
-        padding: 8px 15px;
-        background: #FFF3E0;
-        border-radius: 5px;
-        border-left: 4px solid #FF9800;
+        padding: 10px 20px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 rgba(255, 167, 38, 0.3), stop:1 rgba(251, 140, 0, 0.3));
+        border-radius: 6px;
+        border: 2px solid #ffa726;
     )");
     QApplication::processEvents();
     
     if (!m_scanner->initialize()) {
-        m_statusLabel->setText("Ошибка инициализации сканера");
+        m_statusLabel->setText("❌ Ошибка инициализации WMI сканера");
         m_statusLabel->setStyleSheet(R"(
-            font-size: 13px; 
-            color: #C62828; 
+            font-size: 14px; 
+            color: #ef5350; 
             font-weight: bold; 
-            padding: 8px 15px;
-            background: #FFEBEE;
-            border-radius: 5px;
-            border-left: 4px solid #F44336;
+            padding: 10px 20px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 rgba(239, 83, 80, 0.3), stop:1 rgba(229, 57, 53, 0.3));
+            border-radius: 6px;
+            border: 2px solid #ef5350;
         )");
         return;
     }
@@ -199,19 +256,20 @@ void StorageWindow::scanDevices() {
     m_disks = m_scanner->scanStorageDevices();
     
     if (m_disks.empty()) {
-        m_statusLabel->setText("Накопители не обнаружены");
+        m_statusLabel->setText("⚠ Накопители не обнаружены в системе");
         m_statusLabel->setStyleSheet(R"(
-            font-size: 13px; 
-            color: #C62828; 
+            font-size: 14px; 
+            color: #ef5350; 
             font-weight: bold; 
-            padding: 8px 15px;
-            background: #FFEBEE;
-            border-radius: 5px;
-            border-left: 4px solid #F44336;
+            padding: 10px 20px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 rgba(239, 83, 80, 0.3), stop:1 rgba(229, 57, 53, 0.3));
+            border-radius: 6px;
+            border: 2px solid #ef5350;
         )");
         QMessageBox::information(this, "Информация", "Накопители не обнаружены");
     } else {
-        m_statusLabel->setText(QString("Обнаружено накопителей: %1 | Общий объем: %2")
+        m_statusLabel->setText(QString("✓ Обнаружено накопителей: %1 | Общий объем: %2")
             .arg(m_disks.size())
             .arg(formatSize([this]() {
                 uint64_t total = 0;
@@ -219,13 +277,14 @@ void StorageWindow::scanDevices() {
                 return total;
             }())));
         m_statusLabel->setStyleSheet(R"(
-            font-size: 13px; 
-            color: #1B5E20; 
+            font-size: 14px; 
+            color: #00e676; 
             font-weight: bold; 
-            padding: 8px 15px;
-            background: #E8F5E9;
-            border-radius: 5px;
-            border-left: 4px solid #4CAF50;
+            padding: 10px 20px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 rgba(0, 150, 136, 0.3), stop:1 rgba(0, 200, 83, 0.3));
+            border-radius: 6px;
+            border: 2px solid #00e676;
         )");
         populateTable(m_disks);
     }
@@ -254,10 +313,13 @@ void StorageWindow::populateTable(const std::vector<StorageDevice>& disks) {
         QTableWidgetItem *typeItem = new QTableWidgetItem(disk.driveType);
         typeItem->setFont(QFont("Arial", 10, QFont::Bold));
         typeItem->setTextAlignment(Qt::AlignCenter);
-        if (disk.driveType == "SSD") {
-            typeItem->setForeground(QBrush(QColor(0, 150, 136)));
+        if (disk.driveType.contains("SSD", Qt::CaseInsensitive) || 
+            disk.driveType.contains("NVMe", Qt::CaseInsensitive)) {
+            typeItem->setForeground(QBrush(QColor(0, 230, 118))); // Bright green for SSD/NVMe
+        } else if (disk.driveType == "HDD") {
+            typeItem->setForeground(QBrush(QColor(255, 138, 101))); // Orange for HDD
         } else {
-            typeItem->setForeground(QBrush(QColor(255, 87, 34)));
+            typeItem->setForeground(QBrush(QColor(100, 181, 246))); // Blue for unknown
         }
         m_diskTable->setItem(row, 5, typeItem);
         
@@ -281,65 +343,96 @@ void StorageWindow::onTableItemClicked(int row, int column) {
     const StorageDevice& disk = m_disks[row];
     
     QString details;
-    details += "═══════════════════════════════════════════════════════════════\n";
-    details += QString("  %1\n").arg(disk.model.toUpper());
-    details += "═══════════════════════════════════════════════════════════════\n\n";
+    details += "╔═══════════════════════════════════════════════════════════════╗\n";
+    details += QString("║  %1%2║\n")
+        .arg(disk.model.toUpper())
+        .arg(QString(" ").repeated(qMax(0, 61 - disk.model.length())));
+    details += "╚═══════════════════════════════════════════════════════════════╝\n\n";
     
-    details += "[ ОСНОВНАЯ ИНФОРМАЦИЯ ]\n";
-    details += "───────────────────────────────────────────────────────────────\n";
-    details += QString("  Модель:                 %1\n").arg(disk.model);
-    details += QString("  Изготовитель:           %1\n").arg(disk.manufacturer);
-    details += QString("  Серийный номер:         %1\n").arg(disk.serialNumber);
-    details += QString("  Версия прошивки:        %1\n").arg(disk.firmwareVersion);
-    details += QString("  Тип накопителя:         %1\n").arg(disk.driveType);
-    details += QString("  Интерфейс подключения:  %1\n").arg(disk.interfaceType);
-    details += QString("  Системный диск:         %1\n").arg(disk.isSystemDrive ? "Да" : "Нет");
-    details += "\n";
+    details += "┌─────────────────────────────────────────────────────────────┐\n";
+    details += "│ ОСНОВНАЯ ИНФОРМАЦИЯ                                         │\n";
+    details += "├─────────────────────────────────────────────────────────────┤\n";
+    details += QString("│  Модель:                 %-35s│\n").arg(disk.model);
+    details += QString("│  Изготовитель:           %-35s│\n").arg(disk.manufacturer);
+    details += QString("│  Серийный номер:         %-35s│\n").arg(disk.serialNumber);
+    details += QString("│  Версия прошивки:        %-35s│\n").arg(disk.firmwareVersion);
+    details += QString("│  Тип накопителя:         %-35s│\n").arg(disk.driveType);
+    details += QString("│  Интерфейс подключения:  %-35s│\n").arg(disk.interfaceType);
+    details += QString("│  Системный диск:         %-35s│\n").arg(disk.isSystemDrive ? "Да" : "Нет");
+    details += "└─────────────────────────────────────────────────────────────┘\n\n";
     
-    details += "[ ИНФОРМАЦИЯ О ПАМЯТИ ]\n";
-    details += "───────────────────────────────────────────────────────────────\n";
-    details += QString("  Общий объем:            %1\n").arg(formatSize(disk.totalSize));
-    details += QString("  Свободно:               %1\n").arg(formatSize(disk.freeSpace));
-    details += QString("  Занято:                 %1\n").arg(formatSize(disk.usedSpace));
+    details += "┌─────────────────────────────────────────────────────────────┐\n";
+    details += "│ ИНФОРМАЦИЯ О ПАМЯТИ                                         │\n";
+    details += "├─────────────────────────────────────────────────────────────┤\n";
+    details += QString("│  Общий объем:            %-35s│\n").arg(formatSize(disk.totalSize));
+    details += QString("│  Свободно:               %-35s│\n").arg(formatSize(disk.freeSpace));
+    details += QString("│  Занято:                 %-35s│\n").arg(formatSize(disk.usedSpace));
+    details += "├─────────────────────────────────────────────────────────────┤\n";
     
     double usedPercent = disk.totalSize > 0 ? 
         (double)disk.usedSpace / disk.totalSize * 100.0 : 0.0;
     double freePercent = 100.0 - usedPercent;
     
-    details += QString("  Использовано:           %1% ").arg(QString::number(usedPercent, 'f', 1));
+    details += QString("│  Использовано:           %1% ").arg(QString::number(usedPercent, 'f', 1), 5);
     int usedBars = (int)(usedPercent / 5);
     details += "[";
     for (int i = 0; i < 20; i++) {
         details += (i < usedBars) ? "█" : "░";
     }
-    details += "]\n";
-    details += QString("  Свободно:               %1%\n").arg(QString::number(freePercent, 'f', 1));
-    details += "\n";
+    details += "]    │\n";
+    details += QString("│  Свободно:               %1%%                          │\n")
+        .arg(QString::number(freePercent, 'f', 1), -5);
+    details += "└─────────────────────────────────────────────────────────────┘\n\n";
     
     if (!disk.supportedModes.isEmpty()) {
-        details += "[ ПОДДЕРЖИВАЕМЫЕ РЕЖИМЫ ]\n";
-        details += "───────────────────────────────────────────────────────────────\n";
+        details += "┌─────────────────────────────────────────────────────────────┐\n";
+        details += "│ ПОДДЕРЖИВАЕМЫЕ РЕЖИМЫ                                       │\n";
+        details += "├─────────────────────────────────────────────────────────────┤\n";
         for (const QString& mode : disk.supportedModes) {
-            details += QString("  > %1\n").arg(mode);
+            details += QString("│  > %-56s│\n").arg(mode);
         }
-        details += "\n";
+        details += "└─────────────────────────────────────────────────────────────┘\n\n";
     }
     
-    details += "═══════════════════════════════════════════════════════════════";
+    details += "╔═══════════════════════════════════════════════════════════════╗\n";
+    details += "║  Данные получены через системные вызовы Windows WMI & API    ║\n";
+    details += "╚═══════════════════════════════════════════════════════════════╝";
     
     m_detailsText->setPlainText(details);
 }
 
+void StorageWindow::refreshDevices() {
+    m_detailsText->setPlainText("┌──────────────────────────────────────────────────────────────┐\n"
+                                 "│  Обновление списка накопителей...                            │\n"
+                                 "│  Пожалуйста, подождите...                                    │\n"
+                                 "└──────────────────────────────────────────────────────────────┘");
+    QApplication::processEvents();
+    
+    // Re-scan devices
+    scanDevices();
+}
+
 QString StorageWindow::formatSize(uint64_t bytes) {
-    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+    const char* units[] = {"B", "KB", "MB", "GB", "TB", "PB"};
     int unitIndex = 0;
     double size = static_cast<double>(bytes);
     
-    while (size >= 1024.0 && unitIndex < 4) {
+    // Use binary (1024) conversion like Windows does
+    while (size >= 1024.0 && unitIndex < 5) {
         size /= 1024.0;
         unitIndex++;
     }
     
-    return QString("%1 %2").arg(QString::number(size, 'f', 2)).arg(units[unitIndex]);
+    // Format with appropriate precision based on size
+    QString sizeStr;
+    if (unitIndex >= 3) { // GB, TB, PB
+        sizeStr = QString::number(size, 'f', 2);
+    } else if (unitIndex == 2) { // MB
+        sizeStr = QString::number(size, 'f', 1);
+    } else { // B, KB
+        sizeStr = QString::number(size, 'f', 0);
+    }
+    
+    return QString("%1 %2").arg(sizeStr).arg(units[unitIndex]);
 }
 

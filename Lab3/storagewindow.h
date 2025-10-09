@@ -18,6 +18,7 @@ public:
 private slots:
     void scanDevices();
     void onTableItemClicked(int row, int column);
+    void refreshDevices();
 
 private:
     void setupUI();

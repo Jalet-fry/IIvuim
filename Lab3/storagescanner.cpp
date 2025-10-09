@@ -137,14 +137,15 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
         return devices;
     }
 
-    qDebug() << "====================================================";
-    qDebug() << "ИСПОЛЬЗУЕМЫЕ СИСТЕМНЫЕ ВЫЗОВЫ WINDOWS API:";
-    qDebug() << "  1. WMI (Win32_DiskDrive) - получение информации о накопителях";
-    qDebug() << "  2. DeviceIoControl + IOCTL_STORAGE_GET_DEVICE_NUMBER - сопоставление дисков";
-    qDebug() << "  3. GetDiskFreeSpaceExW - получение свободного места";
-    qDebug() << "  4. GetLogicalDrives - получение списка логических дисков";
-    qDebug() << "  5. CreateFileW - открытие дескриптора устройства";
-    qDebug() << "====================================================";
+    qDebug() << "╔════════════════════════════════════════════════════════════╗";
+    qDebug() << "║  СКАНИРОВАНИЕ НАКОПИТЕЛЕЙ - СИСТЕМНЫЕ ВЫЗОВЫ WINDOWS API  ║";
+    qDebug() << "╠════════════════════════════════════════════════════════════╣";
+    qDebug() << "║  1. WMI (Win32_DiskDrive) - информация о накопителях      ║";
+    qDebug() << "║  2. DeviceIoControl + IOCTL_STORAGE_GET_DEVICE_NUMBER     ║";
+    qDebug() << "║  3. GetDiskFreeSpaceExW - получение свободного места      ║";
+    qDebug() << "║  4. GetLogicalDrives - список логических дисков           ║";
+    qDebug() << "║  5. CreateFileW - открытие дескриптора устройства         ║";
+    qDebug() << "╚════════════════════════════════════════════════════════════╝";
 
     // Query for physical disk drives
     IEnumWbemClassObject* pEnumerator = nullptr;
@@ -192,26 +193,58 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
             VariantClear(&vtProp);
         }
         
-        // If manufacturer is generic, try to extract from model
+        // Enhanced manufacturer detection from model name
         if (device.manufacturer == "N/A" || 
             device.manufacturer.contains("Standard", Qt::CaseInsensitive) ||
-            device.manufacturer.contains("Стандартные", Qt::CaseInsensitive)) {
+            device.manufacturer.contains("Стандартные", Qt::CaseInsensitive) ||
+            device.manufacturer.isEmpty() ||
+            device.manufacturer == "(Standard disk drives)") {
             QString modelLower = device.model.toLower();
-            if (modelLower.contains("samsung")) device.manufacturer = "Samsung";
-            else if (modelLower.contains("micron")) device.manufacturer = "Micron";
-            else if (modelLower.contains("wd") || modelLower.contains("western digital")) device.manufacturer = "Western Digital";
-            else if (modelLower.contains("seagate")) device.manufacturer = "Seagate";
-            else if (modelLower.contains("kingston")) device.manufacturer = "Kingston";
-            else if (modelLower.contains("crucial")) device.manufacturer = "Crucial";
-            else if (modelLower.contains("intel")) device.manufacturer = "Intel";
-            else if (modelLower.contains("sandisk")) device.manufacturer = "SanDisk";
-            else if (modelLower.contains("toshiba")) device.manufacturer = "Toshiba";
+            QString modelUpper = device.model.toUpper();
+            
+            // Priority detection - check model patterns
+            if (modelUpper.contains("MICRON_") || modelLower.contains("micron")) 
+                device.manufacturer = "Micron";
+            else if (modelLower.contains("samsung")) 
+                device.manufacturer = "Samsung";
+            else if (modelLower.contains("wd_") || modelLower.contains("wd ") || 
+                     modelLower.contains("western digital")) 
+                device.manufacturer = "Western Digital";
+            else if (modelLower.contains("seagate") || modelLower.contains("st")) 
+                device.manufacturer = "Seagate";
+            else if (modelLower.contains("kingston")) 
+                device.manufacturer = "Kingston";
+            else if (modelLower.contains("crucial")) 
+                device.manufacturer = "Crucial";
+            else if (modelLower.contains("intel")) 
+                device.manufacturer = "Intel";
+            else if (modelLower.contains("sandisk")) 
+                device.manufacturer = "SanDisk";
+            else if (modelLower.contains("toshiba")) 
+                device.manufacturer = "Toshiba";
+            else if (modelLower.contains("corsair")) 
+                device.manufacturer = "Corsair";
+            else if (modelLower.contains("adata")) 
+                device.manufacturer = "ADATA";
+            else if (modelLower.contains("hitachi") || modelLower.contains("hgst")) 
+                device.manufacturer = "HGST/Hitachi";
         }
 
-        // Get Serial Number
+        // Get Serial Number with enhanced formatting
         hr = pclsObj->Get(L"SerialNumber", 0, &vtProp, 0, 0);
         if (SUCCEEDED(hr)) {
             device.serialNumber = variantToString(vtProp).trimmed();
+            // Clean up serial number - remove excess whitespace
+            device.serialNumber = device.serialNumber.simplified();
+            // If serial number is too long or looks like hex data, format it nicely
+            if (device.serialNumber.length() > 50) {
+                // Keep original format for very long serial numbers
+                device.serialNumber = device.serialNumber.replace(" ", "_");
+            }
+            // Add trailing dot for consistency with system info display
+            if (!device.serialNumber.isEmpty() && !device.serialNumber.endsWith(".")) {
+                device.serialNumber += ".";
+            }
             VariantClear(&vtProp);
         }
 
@@ -241,10 +274,25 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
         // Determine drive type using both media type and model
         device.driveType = determineDriveType(mediaType, device.model);
         
-        // Smart interface detection: if model indicates NVMe but interface is SCSI
-        if (device.driveType.contains("NVMe", Qt::CaseInsensitive) && 
-            device.interfaceType == "SCSI") {
+        // Smart interface detection: if model indicates NVMe but interface is SCSI or unknown
+        if (device.driveType.contains("NVMe", Qt::CaseInsensitive)) {
+            if (device.interfaceType == "SCSI" || 
+                device.interfaceType == "Unknown" || 
+                device.interfaceType.isEmpty()) {
+                device.interfaceType = "NVMe";
+            }
+        }
+        
+        // Additional NVMe detection based on model patterns
+        QString modelUpper = device.model.toUpper();
+        if ((modelUpper.contains("MICRON_") || 
+             device.model.toLower().contains("nvme") ||
+             modelUpper.contains("_NVMe")) && 
+            device.interfaceType != "NVMe") {
             device.interfaceType = "NVMe";
+            if (!device.driveType.contains("NVMe", Qt::CaseInsensitive)) {
+                device.driveType = "SSD (NVMe)";
+            }
         }
 
         // Get Size
@@ -284,6 +332,22 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
 
         // Check if system drive
         device.isSystemDrive = deviceID.contains("PHYSICALDRIVE0", Qt::CaseInsensitive);
+
+        // Debug output for verification
+        qDebug() << "\n┌─────────────────────────────────────────────────────────────┐";
+        qDebug() << "│ ОБНАРУЖЕНО УСТРОЙСТВО:";
+        qDebug() << "├─────────────────────────────────────────────────────────────┤";
+        qDebug() << QString("│  Модель: %1").arg(device.model);
+        qDebug() << QString("│  Производитель: %1").arg(device.manufacturer);
+        qDebug() << QString("│  Серийный номер: %1").arg(device.serialNumber);
+        qDebug() << QString("│  Прошивка: %1").arg(device.firmwareVersion);
+        qDebug() << QString("│  Тип: %1").arg(device.driveType);
+        qDebug() << QString("│  Интерфейс: %1").arg(device.interfaceType);
+        qDebug() << QString("│  Размер: %1 bytes").arg(device.totalSize);
+        qDebug() << QString("│  Свободно: %1 bytes").arg(device.freeSpace);
+        qDebug() << QString("│  Занято: %1 bytes").arg(device.usedSpace);
+        qDebug() << QString("│  Системный: %1").arg(device.isSystemDrive ? "Да" : "Нет");
+        qDebug() << "└─────────────────────────────────────────────────────────────┘";
 
         devices.push_back(device);
         pclsObj->Release();
@@ -339,18 +403,32 @@ QString StorageScanner::determineInterfaceType(const QString& interfaceType) {
 QString StorageScanner::determineDriveType(const QString& mediaType, const QString& model) {
     // Check model first - more reliable
     QString modelLower = model.toLower();
+    QString modelUpper = model.toUpper();
     
-    // NVMe drives are always SSD
-    if (modelLower.contains("nvme") || modelLower.contains("micron_2400") || 
-        modelLower.contains("samsung 970") || modelLower.contains("samsung 980") ||
-        modelLower.contains("wd black sn") || modelLower.contains("kingston nv")) {
+    // NVMe drives detection - check model patterns
+    if (modelLower.contains("nvme") || 
+        modelUpper.contains("MICRON_") || 
+        modelLower.contains("micron 2") ||
+        modelLower.contains("samsung 970") || 
+        modelLower.contains("samsung 980") ||
+        modelLower.contains("samsung 990") ||
+        modelLower.contains("wd black sn") || 
+        modelLower.contains("wd_black sn") ||
+        modelLower.contains("kingston nv") ||
+        modelLower.contains("crucial p") ||
+        modelLower.contains("intel 660p") ||
+        modelLower.contains("seagate firecuda")) {
         return "SSD (NVMe)";
     }
     
-    // Check for common SSD model indicators
-    if (modelLower.contains("ssd") || modelLower.contains("solid state") ||
-        modelLower.contains("samsung 8") || modelLower.contains("crucial mx") ||
-        modelLower.contains("kingston sa")) {
+    // Check for common SSD model indicators (SATA SSDs)
+    if (modelLower.contains("ssd") || 
+        modelLower.contains("solid state") ||
+        modelLower.contains("samsung 8") || 
+        modelLower.contains("crucial mx") ||
+        modelLower.contains("kingston sa") ||
+        modelLower.contains("adata su") ||
+        modelLower.contains("sandisk ultra")) {
         return "SSD";
     }
     
