@@ -20,7 +20,7 @@ StorageWindow::~StorageWindow() {
 
 void StorageWindow::setupUI() {
     setWindowTitle("Лабораторная работа №3 - Анализатор устройств хранения данных");
-    setMinimumSize(1300, 800);
+    setMinimumSize(1300, 900);  // Увеличили высоту с 800 до 900
     setStyleSheet(R"(
         QWidget {
             background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -91,9 +91,34 @@ void StorageWindow::setupUI() {
             border-radius: 8px;
             padding: 15px;
             font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 12px;
+            font-size: 14px;
             color: #e0f7fa;
-            line-height: 1.6;
+            line-height: 1.8;
+        }
+        QScrollBar:vertical {
+            background: rgba(55, 71, 79, 0.8);
+            width: 16px;
+            border-radius: 8px;
+            margin: 0px;
+        }
+        QScrollBar::handle:vertical {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #00bcd4, stop:1 #0097a7);
+            border-radius: 8px;
+            min-height: 30px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #00e5ff, stop:1 #00bcd4);
+        }
+        QScrollBar::handle:vertical:pressed {
+            background: #006064;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+            background: none;
         }
         QLabel {
             color: #e0f7fa;
@@ -203,10 +228,17 @@ void StorageWindow::setupUI() {
     m_diskTable->verticalHeader()->setVisible(false);
     m_diskTable->setShowGrid(true);
     
+    // ВАЖНО: Добавляем вертикальную прокрутку для ТАБЛИЦЫ
+    m_diskTable->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+    m_diskTable->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    
+    // Настройка размера строк для лучшей видимости
+    m_diskTable->verticalHeader()->setDefaultSectionSize(50);  // Высота строки 50px (увеличено)
+    
     connect(m_diskTable, &QTableWidget::cellClicked, this, &StorageWindow::onTableItemClicked);
     
     tableLayout->addWidget(m_diskTable);
-    mainLayout->addWidget(tableGroup, 2);
+    mainLayout->addWidget(tableGroup, 2);  // Таблица - БОЛЬШЕ места (было 1)
     
     QGroupBox *detailsGroup = new QGroupBox("Детальная информация об устройстве");
     QVBoxLayout *detailsLayout = new QVBoxLayout(detailsGroup);
@@ -214,6 +246,12 @@ void StorageWindow::setupUI() {
     
     m_detailsText = new QTextEdit();
     m_detailsText->setReadOnly(true);
+    
+    // ВАЖНО: Настройки прокрутки
+    m_detailsText->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);   // Прокрутка всегда видна
+    m_detailsText->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded); // Горизонтальная по необходимости
+    m_detailsText->setLineWrapMode(QTextEdit::NoWrap);                  // Без переноса строк
+    
     m_detailsText->setPlainText("┌──────────────────────────────────────────────────────────────┐\n"
                                  "│  Выберите накопитель из таблицы для просмотра детальной      │\n"
                                  "│  информации о устройстве, включая характеристики,            │\n"
@@ -221,7 +259,7 @@ void StorageWindow::setupUI() {
                                  "└──────────────────────────────────────────────────────────────┘");
     detailsLayout->addWidget(m_detailsText);
     
-    mainLayout->addWidget(detailsGroup, 1);
+    mainLayout->addWidget(detailsGroup, 1);  // Детали - МЕНЬШЕ места (было 2) - теперь 2:1!
 }
 
 void StorageWindow::scanDevices() {
@@ -342,6 +380,19 @@ void StorageWindow::onTableItemClicked(int row, int column) {
     
     const StorageDevice& disk = m_disks[row];
     
+    // Helper function для выравнивания текста
+    auto formatLine = [](const QString& label, const QString& value, int totalWidth = 60) -> QString {
+        int labelWidth = 25;
+        QString result = "│  " + label.leftJustified(labelWidth) + value;
+        // Дополняем пробелами до нужной ширины
+        int currentWidth = 3 + labelWidth + value.length(); // 3 = "│  " + последний пробел
+        if (currentWidth < totalWidth) {
+            result += QString(" ").repeated(totalWidth - currentWidth);
+        }
+        result += " │\n";
+        return result;
+    };
+    
     QString details;
     details += "╔═══════════════════════════════════════════════════════════════╗\n";
     details += QString("║  %1%2║\n")
@@ -350,23 +401,33 @@ void StorageWindow::onTableItemClicked(int row, int column) {
     details += "╚═══════════════════════════════════════════════════════════════╝\n\n";
     
     details += "┌─────────────────────────────────────────────────────────────┐\n";
-    details += "│ ОСНОВНАЯ ИНФОРМАЦИЯ                                         │\n";
+    details += "│ ⚙️  ОСНОВНАЯ ИНФОРМАЦИЯ                                     │\n";
     details += "├─────────────────────────────────────────────────────────────┤\n";
-    details += QString("│  Модель:                 %-35s│\n").arg(disk.model);
-    details += QString("│  Изготовитель:           %-35s│\n").arg(disk.manufacturer);
-    details += QString("│  Серийный номер:         %-35s│\n").arg(disk.serialNumber);
-    details += QString("│  Версия прошивки:        %-35s│\n").arg(disk.firmwareVersion);
-    details += QString("│  Тип накопителя:         %-35s│\n").arg(disk.driveType);
-    details += QString("│  Интерфейс подключения:  %-35s│\n").arg(disk.interfaceType);
-    details += QString("│  Системный диск:         %-35s│\n").arg(disk.isSystemDrive ? "Да" : "Нет");
+    details += formatLine("Модель:", disk.model);
+    details += formatLine("Изготовитель:", disk.manufacturer);
+    details += formatLine("Серийный номер:", disk.serialNumber);
+    details += formatLine("Версия прошивки:", disk.firmwareVersion);
+    details += formatLine("Тип накопителя:", disk.driveType);
+    
+    // ВАЖНО: Выделяем тип интерфейса
+    QString interfaceHighlight = disk.interfaceType;
+    if (disk.interfaceType == "NVMe") {
+        interfaceHighlight = "🚀 " + disk.interfaceType + " (PCIe)";
+    } else if (disk.interfaceType == "SATA") {
+        interfaceHighlight = "💾 " + disk.interfaceType;
+    } else if (disk.interfaceType == "USB") {
+        interfaceHighlight = "🔌 " + disk.interfaceType;
+    }
+    details += formatLine("Интерфейс подключения:", interfaceHighlight);
+    details += formatLine("Системный диск:", disk.isSystemDrive ? "Да ✓" : "Нет");
     details += "└─────────────────────────────────────────────────────────────┘\n\n";
     
     details += "┌─────────────────────────────────────────────────────────────┐\n";
-    details += "│ ИНФОРМАЦИЯ О ПАМЯТИ                                         │\n";
+    details += "│ 💾 ИНФОРМАЦИЯ О ПАМЯТИ                                      │\n";
     details += "├─────────────────────────────────────────────────────────────┤\n";
-    details += QString("│  Общий объем:            %-35s│\n").arg(formatSize(disk.totalSize));
-    details += QString("│  Свободно:               %-35s│\n").arg(formatSize(disk.freeSpace));
-    details += QString("│  Занято:                 %-35s│\n").arg(formatSize(disk.usedSpace));
+    details += formatLine("Общий объем:", formatSize(disk.totalSize));
+    details += formatLine("Свободно:", formatSize(disk.freeSpace));
+    details += formatLine("Занято:", formatSize(disk.usedSpace));
     details += "├─────────────────────────────────────────────────────────────┤\n";
     
     double usedPercent = disk.totalSize > 0 ? 
@@ -380,22 +441,32 @@ void StorageWindow::onTableItemClicked(int row, int column) {
         details += (i < usedBars) ? "█" : "░";
     }
     details += "]    │\n";
-    details += QString("│  Свободно:               %1%%                          │\n")
-        .arg(QString::number(freePercent, 'f', 1), -5);
+    details += QString("│  Свободно:               %1%                            │\n")
+        .arg(QString::number(freePercent, 'f', 1).leftJustified(5));
     details += "└─────────────────────────────────────────────────────────────┘\n\n";
     
     if (!disk.supportedModes.isEmpty()) {
         details += "┌─────────────────────────────────────────────────────────────┐\n";
-        details += "│ ПОДДЕРЖИВАЕМЫЕ РЕЖИМЫ                                       │\n";
+        details += "│ 🔧 ПОДДЕРЖИВАЕМЫЕ РЕЖИМЫ                                    │\n";
         details += "├─────────────────────────────────────────────────────────────┤\n";
         for (const QString& mode : disk.supportedModes) {
-            details += QString("│  > %-56s│\n").arg(mode);
+            QString modeLine = "│  ▸ " + mode;
+            int padding = 62 - modeLine.length();
+            if (padding > 0) {
+                modeLine += QString(" ").repeated(padding);
+            }
+            modeLine += "│\n";
+            details += modeLine;
         }
         details += "└─────────────────────────────────────────────────────────────┘\n\n";
     }
     
     details += "╔═══════════════════════════════════════════════════════════════╗\n";
-    details += "║  Данные получены через системные вызовы Windows WMI & API    ║\n";
+    if (disk.interfaceType == "NVMe") {
+        details += "║  ✅ Тип интерфейса определён через WMI MSFT_PhysicalDisk   ║\n";
+    } else {
+        details += "║  ℹ️  Данные получены через системные вызовы Windows API    ║\n";
+    }
     details += "╚═══════════════════════════════════════════════════════════════╝";
     
     m_detailsText->setPlainText(details);

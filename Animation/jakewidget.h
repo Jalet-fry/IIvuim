@@ -60,6 +60,7 @@ private:
     qreal smoothFactor;
     qreal m_scale;
     qreal m_rotation;
+    bool m_isFollowingMouse;  // Флаг: следует ли за мышкой
 
     // Physics parameters for better motion
     qreal damping;

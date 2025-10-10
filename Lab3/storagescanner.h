@@ -46,6 +46,10 @@ private:
     // Системные вызовы Windows API для получения информации о дисках
     int getPhysicalDriveNumber(const QString& deviceID);
     uint64_t getDriveSpaceByPhysicalNumber(int driveNumber);
+    
+    // Получение точного BusType через Storage namespace (NVMe/SATA/USB/etc)
+    QString getAccurateBusType(int physicalDriveNumber);
+    QString busTypeCodeToString(uint16_t busType);
 };
 
 #endif // STORAGESCANNER_H

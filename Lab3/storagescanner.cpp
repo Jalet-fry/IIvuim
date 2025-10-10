@@ -137,15 +137,16 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
         return devices;
     }
 
-    qDebug() << "╔════════════════════════════════════════════════════════════╗";
-    qDebug() << "║  СКАНИРОВАНИЕ НАКОПИТЕЛЕЙ - СИСТЕМНЫЕ ВЫЗОВЫ WINDOWS API  ║";
-    qDebug() << "╠════════════════════════════════════════════════════════════╣";
-    qDebug() << "║  1. WMI (Win32_DiskDrive) - информация о накопителях      ║";
-    qDebug() << "║  2. DeviceIoControl + IOCTL_STORAGE_GET_DEVICE_NUMBER     ║";
-    qDebug() << "║  3. GetDiskFreeSpaceExW - получение свободного места      ║";
-    qDebug() << "║  4. GetLogicalDrives - список логических дисков           ║";
-    qDebug() << "║  5. CreateFileW - открытие дескриптора устройства         ║";
-    qDebug() << "╚════════════════════════════════════════════════════════════╝";
+    qDebug() << "╔══════════════════════════════════════════════════════════════╗";
+    qDebug() << "║  СКАНИРОВАНИЕ НАКОПИТЕЛЕЙ - СИСТЕМНЫЕ ВЫЗОВЫ WINDOWS API    ║";
+    qDebug() << "╠══════════════════════════════════════════════════════════════╣";
+    qDebug() << "║  1. WMI (Win32_DiskDrive) - базовая информация о дисках     ║";
+    qDebug() << "║  2. WMI (MSFT_PhysicalDisk) - точный BusType (NVMe/SATA)    ║";
+    qDebug() << "║  3. DeviceIoControl + IOCTL_STORAGE_GET_DEVICE_NUMBER       ║";
+    qDebug() << "║  4. GetDiskFreeSpaceExW - получение свободного места        ║";
+    qDebug() << "║  5. GetLogicalDrives - список логических дисков             ║";
+    qDebug() << "║  6. CreateFileW - открытие дескриптора устройства           ║";
+    qDebug() << "╚══════════════════════════════════════════════════════════════╝";
 
     // Query for physical disk drives
     IEnumWbemClassObject* pEnumerator = nullptr;
@@ -308,6 +309,25 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
         if (SUCCEEDED(hr)) {
             deviceID = variantToString(vtProp);
             VariantClear(&vtProp);
+        }
+
+        // Получаем номер физического диска для более точного определения BusType
+        int physicalDriveNumber = getPhysicalDriveNumber(deviceID);
+        if (physicalDriveNumber >= 0) {
+            // Используем современный Storage API для точного определения интерфейса
+            QString accurateBusType = getAccurateBusType(physicalDriveNumber);
+            
+            // Если получили точный BusType - используем его вместо неточного SCSI
+            if (accurateBusType != "Unknown" && 
+                (device.interfaceType == "SCSI" || device.interfaceType == "Unknown")) {
+                device.interfaceType = accurateBusType;
+                qDebug() << ">>> Corrected interface type from SCSI to" << accurateBusType;
+                
+                // Корректируем тип диска для NVMe
+                if (accurateBusType == "NVMe" && !device.driveType.contains("NVMe")) {
+                    device.driveType = "SSD (NVMe)";
+                }
+            }
         }
 
         // Get free space information
@@ -564,6 +584,130 @@ uint64_t StorageScanner::getDriveSpaceByPhysicalNumber(int driveNumber) {
     
     qDebug() << "Total free space for drive" << driveNumber << ":" << totalFree;
     return totalFree;
+}
+
+QString StorageScanner::busTypeCodeToString(uint16_t busType) {
+    // Коды BusType согласно документации Microsoft MSFT_PhysicalDisk
+    switch (busType) {
+        case 0: return "Unknown";
+        case 1: return "SCSI";
+        case 2: return "ATAPI";
+        case 3: return "ATA";
+        case 4: return "IEEE 1394";
+        case 5: return "SSA";
+        case 6: return "Fibre Channel";
+        case 7: return "USB";
+        case 8: return "RAID";
+        case 9: return "iSCSI";
+        case 10: return "SAS";
+        case 11: return "SATA";
+        case 12: return "SD";
+        case 13: return "MMC";
+        case 14: return "Virtual";
+        case 15: return "File Backed Virtual";
+        case 16: return "Storage Spaces";
+        case 17: return "NVMe";  // ← Это самое важное!
+        case 18: return "Microsoft Reserved";
+        default: return QString("Unknown (%1)").arg(busType);
+    }
+}
+
+QString StorageScanner::getAccurateBusType(int physicalDriveNumber) {
+    qDebug() << "=== СИСТЕМНЫЙ ВЫЗОВ: Определение точного BusType для диска" << physicalDriveNumber;
+    
+    // Подключаемся к Storage namespace для получения точной информации
+    IWbemServices *pStorageSvc = nullptr;
+    BSTR strStorageNamespace = SysAllocString(L"ROOT\\Microsoft\\Windows\\Storage");
+    
+    HRESULT hres = m_pLoc->ConnectServer(
+        strStorageNamespace,
+        NULL,
+        NULL,
+        0,
+        0L,
+        0,
+        0,
+        &pStorageSvc
+    );
+    SysFreeString(strStorageNamespace);
+    
+    if (FAILED(hres)) {
+        qDebug() << "Could not connect to Storage namespace. Error code =" << hres;
+        return "Unknown";
+    }
+    
+    // Set security levels
+    hres = CoSetProxyBlanket(
+        pStorageSvc,
+        RPC_C_AUTHN_WINNT,
+        RPC_C_AUTHZ_NONE,
+        NULL,
+        RPC_C_AUTHN_LEVEL_CALL,
+        RPC_C_IMP_LEVEL_IMPERSONATE,
+        NULL,
+        EOAC_NONE
+    );
+    
+    if (FAILED(hres)) {
+        qDebug() << "Could not set proxy blanket for Storage namespace";
+        pStorageSvc->Release();
+        return "Unknown";
+    }
+    
+    // Query для получения информации о физическом диске
+    QString queryStr = QString("SELECT BusType, MediaType FROM MSFT_PhysicalDisk WHERE DeviceId = '%1'")
+        .arg(physicalDriveNumber);
+    
+    IEnumWbemClassObject* pEnumerator = nullptr;
+    BSTR strQueryLanguage = SysAllocString(L"WQL");
+    BSTR strQuery = SysAllocString(queryStr.toStdWString().c_str());
+    
+    hres = pStorageSvc->ExecQuery(
+        strQueryLanguage,
+        strQuery,
+        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+        NULL,
+        &pEnumerator
+    );
+    
+    SysFreeString(strQuery);
+    SysFreeString(strQueryLanguage);
+    
+    QString busType = "Unknown";
+    
+    if (SUCCEEDED(hres)) {
+        IWbemClassObject *pclsObj = nullptr;
+        ULONG uReturn = 0;
+        
+        if (pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn) == S_OK && uReturn > 0) {
+            VARIANT vtBusType;
+            hres = pclsObj->Get(L"BusType", 0, &vtBusType, 0, 0);
+            
+            if (SUCCEEDED(hres)) {
+                uint16_t busTypeCode = 0;
+                
+                if (vtBusType.vt == VT_I4) {
+                    busTypeCode = static_cast<uint16_t>(vtBusType.lVal);
+                } else if (vtBusType.vt == VT_UI2) {
+                    busTypeCode = vtBusType.uiVal;
+                } else if (vtBusType.vt == VT_I2) {
+                    busTypeCode = static_cast<uint16_t>(vtBusType.iVal);
+                }
+                
+                busType = busTypeCodeToString(busTypeCode);
+                qDebug() << "=== РЕЗУЛЬТАТ: BusType =" << busTypeCode << "→" << busType;
+                
+                VariantClear(&vtBusType);
+            }
+            
+            pclsObj->Release();
+        }
+        
+        pEnumerator->Release();
+    }
+    
+    pStorageSvc->Release();
+    return busType;
 }
 
 void StorageScanner::cleanup() {

@@ -12,13 +12,14 @@
 #include <QDebug>
 
 JakeWidget::JakeWidget(QWidget *parent)
-    : QWidget(parent), currentState(JakeState::FollowMouse), frame(0), t(0.0), 
+    : QWidget(parent), currentState(JakeState::Idle), frame(0), t(0.0), 
       smoothFactor(0.15), m_scale(1.0), m_rotation(0.0),
       damping(0.85), acceleration(0.3), bouncePhase(0.0),
       squashAmount(0.0), stretchAmount(0.0),
       movieLabel(new QLabel(this)), movie(nullptr),
       scaleAnimation(new QPropertyAnimation(this, "scale", this)),
-      rotationAnimation(new QPropertyAnimation(this, "rotation", this))
+      rotationAnimation(new QPropertyAnimation(this, "rotation", this)),
+      m_isFollowingMouse(false)  // Изначально НЕ следует за мышкой
 {
     setAttribute(Qt::WA_TransparentForMouseEvents, false);
     setMouseTracking(true);
@@ -31,12 +32,12 @@ JakeWidget::JakeWidget(QWidget *parent)
     // Более частое обновление следования за мышкой для плавности
     mouseFollowTimer.setInterval(16); // ~60 FPS
     connect(&mouseFollowTimer, SIGNAL(timeout()), this, SLOT(followMouse()));
-    mouseFollowTimer.start();
+    // НЕ запускаем таймер автоматически - только по клику!
     
     // Таймер для автоматического возврата из состояния наведения
     hoverTimer.setSingleShot(true);
 
-    // Начальная позиция
+    // Начальная позиция - появляемся рядом с курсором
     QPoint globalCursorPos = QCursor::pos();
     currentPosition = QPointF(globalCursorPos - QPoint(width()/2, height()/2));
     targetPosition = currentPosition;
@@ -58,6 +59,18 @@ JakeWidget::JakeWidget(QWidget *parent)
     
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
+    
+    // ВАЖНО: Перемещаем виджет на начальную позицию
+    move(qRound(currentPosition.x()), qRound(currentPosition.y()));
+    
+    // Запускаем начальное состояние - Idle с гифкой
+    setState(JakeState::Idle);
+    
+    // Показываем виджет
+    show();
+    raise();  // Поднимаем наверх
+    
+    qDebug() << "Jake: Инициализирован на позиции" << pos() << "в состоянии Idle";
 }
 
 void JakeWidget::setState(JakeState state)
@@ -179,7 +192,7 @@ void JakeWidget::setState(JakeState state)
 
 void JakeWidget::followMouse()
 {
-    if (currentState != JakeState::FollowMouse) return;
+    if (currentState != JakeState::FollowMouse || !m_isFollowingMouse) return;
     
     updatePhysics();
     update();
@@ -345,7 +358,34 @@ void JakeWidget::resizeEvent(QResizeEvent *event)
 void JakeWidget::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        onButtonClick();
+        // ЛКМ - переключить режим следования за мышкой
+        m_isFollowingMouse = !m_isFollowingMouse;
+        
+        if (m_isFollowingMouse) {
+            // Включаем следование
+            setState(JakeState::FollowMouse);
+            mouseFollowTimer.start();
+            qDebug() << "Jake: Следование за мышкой ВКЛЮЧЕНО";
+        } else {
+            // Выключаем следование - возвращаемся к Idle
+            mouseFollowTimer.stop();
+            setState(JakeState::Idle);
+            qDebug() << "Jake: Следование за мышкой ВЫКЛЮЧЕНО";
+        }
+    } else if (event->button() == Qt::RightButton) {
+        // ПКМ - запустить анимацию
+        qDebug() << "Jake: ПКМ - запуск анимации Excited!";
+        setState(JakeState::Excited);
+        
+        // Через 1.5 секунды вернуться к предыдущему состоянию
+        QTimer::singleShot(1500, this, [this]() {
+            if (m_isFollowingMouse) {
+                setState(JakeState::FollowMouse);
+                mouseFollowTimer.start();
+            } else {
+                setState(JakeState::Idle);
+            }
+        });
     }
     QWidget::mousePressEvent(event);
 }
