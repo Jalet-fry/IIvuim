@@ -6,6 +6,7 @@
 #include <QTextEdit>
 #include <QLabel>
 #include <QPushButton>
+#include <QMovie>
 #include "storagescanner.h"
 
 class StorageWindow : public QWidget {
@@ -28,6 +29,8 @@ private:
     QTableWidget *m_diskTable;
     QTextEdit *m_detailsText;
     QLabel *m_statusLabel;
+    QLabel *m_jakeLabel;
+    QMovie *m_jakeMovie;
     StorageScanner *m_scanner;
     std::vector<StorageDevice> m_disks;
 };

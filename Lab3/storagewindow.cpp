@@ -11,11 +11,19 @@
 
 StorageWindow::StorageWindow(QWidget *parent) : QWidget(parent), m_scanner(new StorageScanner()) {
     setupUI();
+    
+    // Инициализация анимации Jake
+    m_jakeMovie = new QMovie(":/Animation/Jake dance.gif");
+    m_jakeMovie->setScaledSize(QSize(100, 100)); // Размер анимации
+    m_jakeLabel->setMovie(m_jakeMovie);
+    m_jakeMovie->start();
+    
     QTimer::singleShot(100, this, &StorageWindow::scanDevices);
 }
 
 StorageWindow::~StorageWindow() {
     delete m_scanner;
+    delete m_jakeMovie;
 }
 
 void StorageWindow::setupUI() {
@@ -140,7 +148,10 @@ void StorageWindow::setupUI() {
             border: 2px solid #4dd0e1;
         }
     )");
-    QVBoxLayout *headerLayout = new QVBoxLayout(headerWidget);
+    QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
+    
+    // Создаем вертикальный layout для текста
+    QVBoxLayout *textLayout = new QVBoxLayout();
     
     QLabel *titleLabel = new QLabel("⚡ АНАЛИЗАТОР УСТРОЙСТВ ХРАНЕНИЯ ⚡");
     titleLabel->setStyleSheet(R"(
@@ -152,7 +163,7 @@ void StorageWindow::setupUI() {
         letter-spacing: 2px;
     )");
     titleLabel->setAlignment(Qt::AlignCenter);
-    headerLayout->addWidget(titleLabel);
+    textLayout->addWidget(titleLabel);
     
     QLabel *subtitleLabel = new QLabel("● Профессиональный анализ накопителей HDD/SSD/NVMe через WMI интерфейс Windows ●");
     subtitleLabel->setStyleSheet(R"(
@@ -162,7 +173,23 @@ void StorageWindow::setupUI() {
         font-weight: 600;
     )");
     subtitleLabel->setAlignment(Qt::AlignCenter);
-    headerLayout->addWidget(subtitleLabel);
+    textLayout->addWidget(subtitleLabel);
+    
+    // Добавляем Jake в заголовок
+    m_jakeLabel = new QLabel();
+    m_jakeLabel->setFixedSize(100, 100);
+    m_jakeLabel->setAlignment(Qt::AlignCenter);
+    m_jakeLabel->setStyleSheet(R"(
+        QLabel {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+    )");
+    
+    // Добавляем элементы в горизонтальный layout
+    headerLayout->addLayout(textLayout, 1); // Текст занимает основное место
+    headerLayout->addWidget(m_jakeLabel, 0, Qt::AlignCenter); // Jake справа
     
     mainLayout->addWidget(headerWidget);
     

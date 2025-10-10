@@ -2,6 +2,10 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QPixmap>
+#include <QTimer>
+#include <QStringList>
+#include <QDir>
 
 class BatteryWidget;
 class JakeWidget;
@@ -17,6 +21,8 @@ public:
 
 protected:
     bool eventFilter(QObject *obj, QEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
 
 private slots:
     void openLab1();
@@ -32,6 +38,14 @@ private:
     StorageWindow *storageWindow;
     void setupJake();
     bool isHoveringButton;
+    QPixmap backgroundPixmap;
+    QTimer *backgroundTimer;
+    QStringList backgroundImages;
+    int currentBackgroundIndex;
+    
+    void changeBackground();
+    void loadRandomBackground();
+    void scanBackgroundImages();
 };
 
 #endif // MAINWINDOW_H
