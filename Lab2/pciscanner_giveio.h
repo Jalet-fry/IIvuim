@@ -6,6 +6,7 @@
 #include <QMap>
 #include <QString>
 #include <windows.h>
+#include "pci_database.h"
 
 struct PCI_Device_GiveIO {
     quint16 vendorID;

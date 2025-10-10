@@ -1,12 +1,17 @@
 #include "pciwidget_giveio.h"
 #include <QApplication>
 #include <QTime>
+#include <QFile>
+#include <QTextStream>
+#include <QDateTime>
+#include <QFileDialog>
 
 PCIWidget_GiveIO::PCIWidget_GiveIO(QWidget *parent) :
     QWidget(parent),
     tableWidget(nullptr),
     scanButton(nullptr),
     clearButton(nullptr),
+    saveButton(nullptr),
     progressBar(nullptr),
     logTextEdit(nullptr),
     mainSplitter(nullptr),
@@ -19,6 +24,7 @@ PCIWidget_GiveIO::PCIWidget_GiveIO(QWidget *parent) :
     // Подключаем сигналы кнопок к UI слотам
     connect(scanButton, &QPushButton::clicked, this, &PCIWidget_GiveIO::onScanClicked);
     connect(clearButton, &QPushButton::clicked, this, &PCIWidget_GiveIO::onClearClicked);
+    connect(saveButton, &QPushButton::clicked, this, &PCIWidget_GiveIO::onSaveToFileClicked);
     connect(tableWidget, &QTableWidget::itemSelectionChanged, this, &PCIWidget_GiveIO::onDeviceSelected);
 
     // Подключаем сигналы от scanner к UI слотам
@@ -28,10 +34,10 @@ PCIWidget_GiveIO::PCIWidget_GiveIO(QWidget *parent) :
     connect(scanner, &PciScannerGiveIO::finished, this, &PCIWidget_GiveIO::onScannerFinished);
     
     if (!scanner->isRunningAsAdmin()) {
-        logMessage("ПРЕДУПРЕЖДЕНИЕ: Программа запущена без прав администратора", true);
-        logMessage("Прямой доступ к PCI может быть ограничен", true);
+        logMessage("WARNING: Program running without administrator rights", true);
+        logMessage("Direct PCI access may be restricted", true);
     } else {
-        logMessage("Программа запущена с правами администратора");
+        logMessage("Program running with administrator rights");
     }
 }
 
@@ -108,8 +114,29 @@ void PCIWidget_GiveIO::initializeUI()
         "}"
     );
     
+    saveButton = new QPushButton("💾 Сохранить в файл", this);
+    saveButton->setMinimumHeight(40);
+    saveButton->setStyleSheet(
+        "QPushButton {"
+        "    background-color: #52C41A;"
+        "    color: white;"
+        "    border: none;"
+        "    border-radius: 8px;"
+        "    font-size: 12px;"
+        "    font-weight: bold;"
+        "    padding: 8px 20px;"
+        "}"
+        "QPushButton:hover {"
+        "    background-color: #46A716;"
+        "}"
+        "QPushButton:pressed {"
+        "    background-color: #3A8B12;"
+        "}"
+    );
+    
     buttonLayout->addWidget(scanButton);
     buttonLayout->addWidget(clearButton);
+    buttonLayout->addWidget(saveButton);
     buttonLayout->addStretch();
     
     topLayout->addLayout(buttonLayout);
@@ -210,6 +237,9 @@ void PCIWidget_GiveIO::logMessage(const QString &message, bool isError)
 {
     QString timestamp = QTime::currentTime().toString("hh:mm:ss");
     QString logEntry = QString("[%1] %2").arg(timestamp).arg(message);
+    
+    // Сохраняем в список для дальнейшего экспорта
+    allLogMessages.append(logEntry);
 
     if (isError) {
         logTextEdit->setTextColor(Qt::red);
@@ -339,12 +369,12 @@ void PCIWidget_GiveIO::onDeviceSelected()
     
     details += "═══════════════════════════════════════════════════════════\n";
     
-    logMessage("═══ Показана детальная информация об устройстве ═══");
+    logMessage("=== Detailed device information shown ===");
     logMessage(QString("Bus %1, Device %2, Function %3: %4 %5")
                .arg(dev.bus).arg(dev.device).arg(dev.function)
                .arg(dev.vendorName).arg(dev.deviceName));
     
-    QMessageBox::information(this, "Детальная информация о PCI устройстве", details);
+    QMessageBox::information(this, "PCI Device Detailed Information", details);
 }
 
 void PCIWidget_GiveIO::onScannerLog(const QString &msg, bool isError)
@@ -374,9 +404,9 @@ void PCIWidget_GiveIO::onScannerFinished(bool anyFound)
     progressBar->setVisible(false);
     
     if (anyFound) {
-        logMessage(QString("Успешно! Найдено устройств: %1").arg(pciDevices.size()));
+        logMessage(QString("Success! Found devices: %1").arg(pciDevices.size()));
     } else {
-        logMessage("ПРЕДУПРЕЖДЕНИЕ: Устройства не найдены или доступ ограничен", true);
+        logMessage("WARNING: No devices found or access restricted", true);
     }
 }
 
@@ -386,16 +416,16 @@ void PCIWidget_GiveIO::onScanClicked()
     pciDevices.clear();
     tableWidget->setRowCount(0);
     
-    logMessage("=== ЗАПУСК ПРОГРАММЫ С GiveIO ===");
+    logMessage("=== STARTING PROGRAM WITH GiveIO ===");
 
     // Проверка доступа
     if (!scanner->testAccess()) {
-        QMessageBox::warning(this, "Ошибка",
-            "Не удалось получить доступ к PCI через GiveIO.\n"
-            "Убедитесь, что:\n"
-            "1. Программа запущена от администратора\n"
-            "2. Драйвер GiveIO установлен в системе\n"
-            "3. Система поддерживает прямой доступ к портам");
+        QMessageBox::warning(this, "Error",
+            "Failed to access PCI via GiveIO.\n"
+            "Make sure that:\n"
+            "1. Program is running as Administrator\n"
+            "2. GiveIO driver is installed in the system\n"
+            "3. System supports direct port access");
         return;
     }
 
@@ -406,12 +436,175 @@ void PCIWidget_GiveIO::onScanClicked()
     // Запускаем основной скан (синхронно)
     scanner->scan();
     
-    logMessage("=== РАБОТА ЗАВЕРШЕНА ===");
+    logMessage("=== WORK COMPLETED ===");
 }
 
 void PCIWidget_GiveIO::onClearClicked()
 {
     logTextEdit->clear();
+    allLogMessages.clear();
+}
+
+void PCIWidget_GiveIO::onSaveToFileClicked()
+{
+    if (pciDevices.isEmpty() && allLogMessages.isEmpty()) {
+        QMessageBox::warning(this, "No Data", "No data to save. Please run scan first.");
+        return;
+    }
+    
+    // Generate filename with date and time
+    QString defaultFileName = QString("PCI_Scan_Report_%1.txt")
+        .arg(QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss"));
+    
+    QString fileName = QFileDialog::getSaveFileName(this,
+        "Save PCI Scan Report",
+        defaultFileName,
+        "Text Files (*.txt);;All Files (*)");
+    
+    if (fileName.isEmpty()) {
+        return;
+    }
+    
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::critical(this, "Error", 
+            QString("Failed to open file for writing:\n%1").arg(fileName));
+        return;
+    }
+    
+    QTextStream out(&file);
+    
+    // Report header
+    out << "===============================================================================\n";
+    out << "                    PCI DEVICES SCAN REPORT (GiveIO)                        \n";
+    out << "===============================================================================\n";
+    out << "\n";
+    out << "Scan Date/Time: " << QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm:ss") << "\n";
+    out << "System: Windows XP (GiveIO driver)\n";
+    out << "Total Devices Found: " << pciDevices.size() << "\n";
+    out << "\n";
+    out << "===============================================================================\n";
+    out << "\n";
+    
+    // Table of found devices
+    if (!pciDevices.isEmpty()) {
+        out << "                           DETECTED PCI DEVICES\n";
+        out << "===============================================================================\n";
+        out << "\n";
+        
+        int deviceNum = 1;
+        foreach (const PCI_Device_GiveIO &dev, pciDevices) {
+            out << "-------------------------------------------------------------------------------\n";
+            out << QString("DEVICE #%1\n").arg(deviceNum++);
+            out << "-------------------------------------------------------------------------------\n";
+            out << "\n";
+            
+            // Physical location
+            out << "PHYSICAL LOCATION:\n";
+            out << QString("   Bus:      %1 (0x%2)\n")
+                .arg(dev.bus, 3)
+                .arg(dev.bus, 2, 16, QChar('0')).toUpper();
+            out << QString("   Device:   %1 (0x%2)\n")
+                .arg(dev.device, 3)
+                .arg(dev.device, 2, 16, QChar('0')).toUpper();
+            out << QString("   Function: %1 (0x%2)\n")
+                .arg(dev.function, 3)
+                .arg(dev.function, 1, 16, QChar('0')).toUpper();
+            out << "\n";
+            
+            // Identification
+            out << "DEVICE IDENTIFICATION:\n";
+            out << QString("   Vendor ID:    0x%1 - %2\n")
+                .arg(dev.vendorID, 4, 16, QChar('0')).toUpper()
+                .arg(dev.vendorName);
+            out << QString("   Device ID:    0x%1 - %2\n")
+                .arg(dev.deviceID, 4, 16, QChar('0')).toUpper()
+                .arg(dev.deviceName);
+            out << "\n";
+            
+            // Classification
+            out << "DEVICE CLASSIFICATION:\n";
+            out << QString("   Class Code:   0x%1 - %2\n")
+                .arg(dev.classCode, 2, 16, QChar('0')).toUpper()
+                .arg(scanner->getClassString(dev.classCode));
+            out << QString("   SubClass:     0x%1 - %2\n")
+                .arg(dev.subClass, 2, 16, QChar('0')).toUpper()
+                .arg(scanner->getSubClassString(dev.classCode, dev.subClass));
+            out << QString("   Prog IF:      %1\n")
+                .arg(scanner->getProgIFString(dev.classCode, dev.subClass, dev.progIF));
+            out << QString("   Revision ID:  0x%1\n")
+                .arg(dev.revisionID, 2, 16, QChar('0')).toUpper();
+            out << "\n";
+            
+            // Configuration header
+            out << "CONFIGURATION HEADER:\n";
+            out << QString("   Header Type:  0x%1 ")
+                .arg(dev.headerType, 2, 16, QChar('0')).toUpper();
+            
+            if ((dev.headerType & 0x7F) == 0x00) {
+                out << "(Standard PCI Device)\n";
+            } else if ((dev.headerType & 0x7F) == 0x01) {
+                out << "(PCI-to-PCI Bridge)\n";
+            } else if ((dev.headerType & 0x7F) == 0x02) {
+                out << "(CardBus Bridge)\n";
+            } else {
+                out << "(Unknown)\n";
+            }
+            
+            // Subsystem (if present)
+            if ((dev.headerType & 0x7F) == 0x00 && (dev.subsysVendorID != 0 || dev.subsysID != 0)) {
+                out << "\n";
+                out << "SUBSYSTEM:\n";
+                out << QString("   Subsystem Vendor ID: 0x%1\n")
+                    .arg(dev.subsysVendorID, 4, 16, QChar('0')).toUpper();
+                out << QString("   Subsystem ID:        0x%1\n")
+                    .arg(dev.subsysID, 4, 16, QChar('0')).toUpper();
+            }
+            
+            out << "\n";
+        }
+        
+        out << "===============================================================================\n";
+        out << "\n";
+    }
+    
+    // Detailed scan log
+    if (!allLogMessages.isEmpty()) {
+        out << "\n\n";
+        out << "                           DETAILED SCAN LOG\n";
+        out << "===============================================================================\n";
+        out << "\n";
+        
+        foreach (const QString &logEntry, allLogMessages) {
+            out << logEntry << "\n";
+        }
+        
+        out << "\n";
+        out << "===============================================================================\n";
+    }
+    
+    // Summary
+    out << "\n\n";
+    out << "                                    SUMMARY\n";
+    out << "===============================================================================\n";
+    out << "\n";
+    out << QString("Total devices found:  %1\n").arg(pciDevices.size());
+    out << QString("Log entries:          %1\n").arg(allLogMessages.size());
+    out << QString("Report created:       %1\n").arg(QDateTime::currentDateTime().toString("dd.MM.yyyy HH:mm:ss"));
+    out << "\n";
+    out << "===============================================================================\n";
+    out << "                     Report generated by PCI Scanner                        \n";
+    out << "                        PCI Devices Scanner - GiveIO                        \n";
+    out << "===============================================================================\n";
+    
+    file.close();
+    
+    logMessage(QString("Report successfully saved: %1").arg(fileName));
+    QMessageBox::information(this, "Success", 
+        QString("Report successfully saved to file:\n%1\n\nTotal devices: %2\nLog entries: %3")
+        .arg(fileName)
+        .arg(pciDevices.size())
+        .arg(allLogMessages.size()));
 }
 
 void PCIWidget_GiveIO::showAndStart()

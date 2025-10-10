@@ -1,4 +1,5 @@
 /IceKingLabs/
+*.txt
 # Qt generated files
 *.pro.user
 *.pro.user.*

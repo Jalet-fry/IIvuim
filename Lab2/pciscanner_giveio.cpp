@@ -15,7 +15,7 @@ PciScannerGiveIO::~PciScannerGiveIO()
 
 bool PciScannerGiveIO::giveioInitialize()
 {
-    emit logMessage("Попытка инициализации GiveIO...");
+    emit logMessage("Attempting GiveIO initialization...");
 
     giveioHandle = CreateFileA("\\\\.\\giveio",
                               GENERIC_READ,
@@ -27,13 +27,13 @@ bool PciScannerGiveIO::giveioInitialize()
 
     if (giveioHandle == INVALID_HANDLE_VALUE) {
         DWORD error = GetLastError();
-        emit logMessage(QString("Ошибка открытия GiveIO: %1").arg(error), true);
-        emit logMessage("Драйвер GiveIO не установлен или не запущен", true);
+        emit logMessage(QString("GiveIO open error: %1").arg(error), true);
+        emit logMessage("GiveIO driver not installed or not running", true);
         return false;
     }
 
     giveioInitialized = true;
-    emit logMessage("GiveIO успешно инициализирован");
+    emit logMessage("GiveIO successfully initialized");
     return true;
 }
 
@@ -85,7 +85,7 @@ DWORD PciScannerGiveIO::giveioInPortDword(WORD port)
 bool PciScannerGiveIO::writePortDword(WORD port, DWORD value)
 {
     if (!giveioInitialized) {
-        emit logMessage("GiveIO не инициализирован", true);
+        emit logMessage("GiveIO not initialized", true);
         return false;
     }
 
@@ -93,7 +93,7 @@ bool PciScannerGiveIO::writePortDword(WORD port, DWORD value)
         giveioOutPortDword(port, value);
         return true;
     } catch (...) {
-        emit logMessage(QString("Ошибка записи в порт 0x%1").arg(port, 4, 16, QChar('0')), true);
+        emit logMessage(QString("Port write error 0x%1").arg(port, 4, 16, QChar('0')), true);
         return false;
     }
 }
@@ -101,14 +101,14 @@ bool PciScannerGiveIO::writePortDword(WORD port, DWORD value)
 DWORD PciScannerGiveIO::readPortDword(WORD port)
 {
     if (!giveioInitialized) {
-        emit logMessage("GiveIO не инициализирован", true);
+        emit logMessage("GiveIO not initialized", true);
         return 0xFFFFFFFF;
     }
 
     try {
         return giveioInPortDword(port);
     } catch (...) {
-        emit logMessage(QString("Ошибка чтения из порта 0x%1").arg(port, 4, 16, QChar('0')), true);
+        emit logMessage(QString("Port read error 0x%1").arg(port, 4, 16, QChar('0')), true);
         return 0xFFFFFFFF;
     }
 }
@@ -219,6 +219,17 @@ QString PciScannerGiveIO::getSubClassString(quint8 classCode, quint8 subClass) c
                 case 0x80: return "Other";
                 default: return QString("Bridge 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
             }
+        case 0x08: // Base System Peripherals
+            switch (subClass) {
+                case 0x00: return "PIC (Interrupt Controller)";
+                case 0x01: return "DMA Controller";
+                case 0x02: return "Timer";
+                case 0x03: return "RTC Controller";
+                case 0x04: return "PCI Hot-Plug Controller";
+                case 0x05: return "SD Host Controller";
+                case 0x80: return "Other System Peripheral";
+                default: return QString("System 0x%1").arg(subClass, 2, 16, QChar('0')).toUpper();
+            }
         case 0x0C: // Serial Bus
             switch (subClass) {
                 case 0x00: return "Firewire (IEEE 1394)";
@@ -276,49 +287,43 @@ QString PciScannerGiveIO::getProgIFString(quint8 classCode, quint8 subClass, qui
 
 QString PciScannerGiveIO::getVendorName(quint16 vendorID) const
 {
-    static QMap<quint16, QString> vendorMap;
-    if (vendorMap.isEmpty()) {
-        vendorMap[0x8086] = "Intel";
-        vendorMap[0x10DE] = "NVIDIA";
-        vendorMap[0x1002] = "AMD";
-        vendorMap[0x1B36] = "Red Hat";
-        vendorMap[0x80EE] = "InnoTek";
-        vendorMap[0x10EC] = "Realtek";
-        vendorMap[0x14E4] = "Broadcom";
-        vendorMap[0x106B] = "Apple";
-        vendorMap[0x1106] = "VIA";
-        vendorMap[0x1234] = "Technical";
+    // Use PCI database for vendor lookup
+    QString dbName = PCIDatabase::findVendorName(vendorID);
+    
+    // If not found in database (case-insensitive check)
+    if (dbName.startsWith("Vendor 0x", Qt::CaseInsensitive) || 
+        dbName.startsWith("VENDOR 0X", Qt::CaseInsensitive)) {
+        // Check hardcoded fallbacks for VirtualBox and other special vendors
+        static QMap<quint16, QString> fallbackMap;
+        if (fallbackMap.isEmpty()) {
+            fallbackMap[0x80EE] = "InnoTek (VirtualBox)";
+            fallbackMap[0x1234] = "QEMU";
+            fallbackMap[0x1B36] = "Red Hat (QEMU)";
+        }
+        return fallbackMap.value(vendorID, dbName);
     }
-
-    return vendorMap.value(vendorID, QString("Vendor 0x%1").arg(vendorID, 4, 16, QChar('0')));
+    
+    return dbName;
 }
 
 QString PciScannerGiveIO::getDeviceName(quint16 vendorID, quint16 deviceID) const
 {
-    if (vendorID == 0x8086) {
-        switch (deviceID) {
-            case 0x1237: return "440FX PCIset";
-            case 0x100E: return "82540EM Ethernet";
-            case 0x2415: return "AC'97 Audio";
-            case 0x265C: return "SATA Controller";
-            case 0x7000: return "PIIX3 ISA Bridge";
-            case 0x7111: return "PIIX4 IDE";
-            case 0x7113: return "PIIX4 ACPI";
-            default: return "Intel Device";
-        }
-    } else if (vendorID == 0x10DE) {
-        return "NVIDIA Graphics";
-    } else if (vendorID == 0x1002) {
-        return "AMD Graphics";
-    } else if (vendorID == 0x80EE) {
-        switch (deviceID) {
-            case 0xBEEF: return "VirtualBox Graphics";
-            case 0xCAFE: return "VirtualBox Service";
-            default: return "VirtualBox Device";
+    // Use PCI database for device lookup
+    QString dbName = PCIDatabase::findDeviceName(vendorID, deviceID);
+    
+    // If not found in database (case-insensitive check)
+    if (dbName.startsWith("Device 0x", Qt::CaseInsensitive) || 
+        dbName.startsWith("DEVICE 0X", Qt::CaseInsensitive)) {
+        if (vendorID == 0x80EE) {
+            switch (deviceID) {
+                case 0xBEEF: return "VirtualBox Graphics Adapter";
+                case 0xCAFE: return "VirtualBox Guest Service";
+                default: return "VirtualBox Device";
+            }
         }
     }
-
-    return QString("Device 0x%1").arg(deviceID, 4, 16, QChar('0'));
+    
+    return dbName;
 }
 
 QList<PCI_Device_GiveIO> PciScannerGiveIO::devices() const
@@ -364,57 +369,57 @@ bool PciScannerGiveIO::isRunningAsAdmin() const
 
 bool PciScannerGiveIO::testAccess()
 {
-    emit logMessage("Проверка доступа к PCI через GiveIO...");
+    emit logMessage("Checking PCI access via GiveIO...");
 
     if (!isRunningAsAdmin()) {
-        emit logMessage("ОШИБКА: Требуются права администратора", true);
+        emit logMessage("ERROR: Administrator rights required", true);
         return false;
     }
 
     if (!giveioInitialize()) {
-        emit logMessage("ОШИБКА: Не удалось инициализировать GiveIO", true);
+        emit logMessage("ERROR: Failed to initialize GiveIO", true);
         return false;
     }
 
-    // Тестирование доступа к портам
-    emit logMessage("=== ТЕСТ ДОСТУПА К ПОРТАМ ===");
+    // Test port access
+    emit logMessage("=== PORT ACCESS TEST ===");
 
-    // Тест порта 0x80 (обычно свободен)
-    emit logMessage("Тест порта 0x0080...");
+    // Test port 0x80 (usually free)
+    emit logMessage("Testing port 0x0080...");
     if (!writePortDword(0x0080, 0x12345678)) {
-        emit logMessage("ОШИБКА: Не удалось записать в порт 0x0080", true);
+        emit logMessage("ERROR: Failed to write to port 0x0080", true);
         giveioShutdown();
         return false;
     }
 
     DWORD testValue = readPortDword(0x0080);
-    emit logMessage(QString("Порт 0x0080: ЧТЕНИЕ УСПЕШНО = 0x%1").arg(testValue, 8, 16, QChar('0')));
+    emit logMessage(QString("Port 0x0080: READ SUCCESS = 0x%1").arg(testValue, 8, 16, QChar('0')));
 
-    // Тест PCI Configuration Space Access
-    emit logMessage("Тест PCI Configuration Space...");
+    // Test PCI Configuration Space Access
+    emit logMessage("Testing PCI Configuration Space...");
 
-    // Записываем адрес для чтения Vendor ID устройства 0:0:0
+    // Write address to read Vendor ID of device 0:0:0
     if (!writePortDword(0x0CF8, 0x80000000)) {
-        emit logMessage("ОШИБКА: Не удалось записать в порт 0x0CF8", true);
+        emit logMessage("ERROR: Failed to write to port 0x0CF8", true);
         giveioShutdown();
         return false;
     }
 
-    // Читаем Vendor ID и Device ID
+    // Read Vendor ID and Device ID
     DWORD vendorDevice = readPortDword(0x0CFC);
     DWORD vendorID = vendorDevice & 0xFFFF;
     DWORD deviceID = (vendorDevice >> 16) & 0xFFFF;
 
-    emit logMessage(QString("Порт 0x0CFC: ЧТЕНИЕ УСПЕШНО = 0x%1").arg(vendorDevice, 8, 16, QChar('0')));
+    emit logMessage(QString("Port 0x0CFC: READ SUCCESS = 0x%1").arg(vendorDevice, 8, 16, QChar('0')));
     emit logMessage(QString("VendorID: 0x%1, DeviceID: 0x%2").arg(vendorID, 4, 16, QChar('0')).arg(deviceID, 4, 16, QChar('0')));
 
     if (vendorID == 0xFFFF || vendorID == 0x0000) {
-        emit logMessage("ПРЕДУПРЕЖДЕНИЕ: VendorID невалиден, но доступ к портам работает", true);
+        emit logMessage("WARNING: VendorID invalid, but port access works", true);
     } else {
-        emit logMessage("Доступ к PCI Configuration Space подтвержден");
+        emit logMessage("PCI Configuration Space access confirmed");
     }
 
-    emit logMessage("GiveIO готов к работе");
+    emit logMessage("GiveIO ready to work");
     giveioShutdown();
     return true;
 }
@@ -477,7 +482,7 @@ bool PciScannerGiveIO::scanInternal()
                     emit deviceFound(dev);
                     foundDevices++;
 
-                    emit logMessage(QString("Найдено: Bus=0x%1 Dev=0x%2 Func=0x%3 VID=0x%4 DID=0x%5 - %6 [%7 / %8]")
+                    emit logMessage(QString("Found: Bus=0x%1 Dev=0x%2 Func=0x%3 VID=0x%4 DID=0x%5 - %6 [%7 / %8]")
                               .arg(bus, 2, 16, QChar('0'))
                               .arg(device, 2, 16, QChar('0'))
                               .arg(function, 1, 16, QChar('0'))
@@ -491,7 +496,7 @@ bool PciScannerGiveIO::scanInternal()
         }
 
         if (bus % 32 == 0) {
-            emit logMessage(QString("Прогресс: Bus 0x%1, найдено: %2 устройств")
+            emit logMessage(QString("Progress: Bus 0x%1, found: %2 devices")
                       .arg(bus, 2, 16, QChar('0'))
                       .arg(foundDevices));
             QThread::yieldCurrentThread();
@@ -507,10 +512,10 @@ bool PciScannerGiveIO::scanInternal()
 
 bool PciScannerGiveIO::scan()
 {
-    emit logMessage("=== НАЧАЛО СКАНИРОВАНИЯ PCI ЧЕРЕЗ GiveIO ===");
+    emit logMessage("=== STARTING PCI SCAN VIA GiveIO ===");
 
     if (!giveioInitialize()) {
-        emit logMessage("ОШИБКА: Не удалось инициализировать GiveIO", true);
+        emit logMessage("ERROR: Failed to initialize GiveIO", true);
         return false;
     }
 
@@ -518,7 +523,7 @@ bool PciScannerGiveIO::scan()
 
     giveioShutdown();
 
-    emit logMessage(QString("Сканирование завершено. Найдено устройств: %1").arg(m_devices.size()));
+    emit logMessage(QString("Scan completed. Found devices: %1").arg(m_devices.size()));
     return result;
 }
 

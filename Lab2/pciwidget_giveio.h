@@ -29,6 +29,7 @@ private slots:
     void onScanClicked();
     void onClearClicked();
     void onDeviceSelected();
+    void onSaveToFileClicked();
 
     // Слоты для подключения к сигналам scanner
     void onScannerLog(const QString &msg, bool isError);
@@ -41,11 +42,15 @@ private:
     QTableWidget *tableWidget;
     QPushButton *scanButton;
     QPushButton *clearButton;
+    QPushButton *saveButton;
     QProgressBar *progressBar;
     QTextEdit *logTextEdit;
     QSplitter *mainSplitter;
     QLabel *jakeAnimationLabel;
     QMovie *jakeAnimation;
+    
+    // Для хранения всех сообщений лога
+    QStringList allLogMessages;
 
     void initializeUI();
     void addDeviceToTable(const PCI_Device_GiveIO &pciDevice);
