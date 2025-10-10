@@ -11,29 +11,9 @@
 #include <QProgressBar>
 #include <QTextEdit>
 #include <QSplitter>
-#include <QMap>
 #include <QLabel>
 #include <QMovie>
-#include <windows.h>
-
-struct PCI_Device {
-    quint16 vendorID;
-    quint16 deviceID;
-    quint8 bus;
-    quint8 device;
-    quint8 function;
-    QString vendorName;
-    QString deviceName;
-    
-    // Дополнительные характеристики из Configuration Space
-    quint8 classCode;      // Offset 0x0B - Class Code
-    quint8 subClass;       // Offset 0x0A - SubClass
-    quint8 progIF;         // Offset 0x09 - Programming Interface
-    quint8 revisionID;     // Offset 0x08 - Revision ID
-    quint8 headerType;     // Offset 0x0E - Header Type
-    quint16 subsysVendorID; // Offset 0x2C - Subsystem Vendor ID
-    quint16 subsysID;      // Offset 0x2E - Subsystem ID
-};
+#include "pciscanner_giveio.h"
 
 class PCIWidget_GiveIO : public QWidget
 {
@@ -46,11 +26,18 @@ public:
     void showAndStart();
 
 private slots:
-    void scanPCI_devices();
-    void clearLog();
+    void onScanClicked();
+    void onClearClicked();
     void onDeviceSelected();
 
+    // Слоты для подключения к сигналам scanner
+    void onScannerLog(const QString &msg, bool isError);
+    void onScannerDeviceFound(const PCI_Device_GiveIO &dev);
+    void onScannerProgress(int value, int maximum);
+    void onScannerFinished(bool anyFound);
+
 private:
+    // UI компоненты
     QTableWidget *tableWidget;
     QPushButton *scanButton;
     QPushButton *clearButton;
@@ -61,42 +48,14 @@ private:
     QMovie *jakeAnimation;
 
     void initializeUI();
-    void scanPCI();
-    bool testPCIAccess();
-    void addDeviceToTable(const PCI_Device &pciDevice);
+    void addDeviceToTable(const PCI_Device_GiveIO &pciDevice);
     void logMessage(const QString &message, bool isError = false);
-    QList<PCI_Device> pciDevices;
-
-    // GiveIO методы
-    bool initializeGiveIO();
-    void shutdownGiveIO();
-    bool scanPCI_GiveIO();
-    bool writePortDword(WORD port, DWORD value);
-    DWORD readPortDword(WORD port);
-
-    // Вспомогательные методы
-    QString getVendorName(quint16 vendorID);
-    QString getDeviceName(quint16 vendorID, quint16 deviceID);
     
-    // Классификация устройств
-    QString getClassString(quint8 classCode);
-    QString getSubClassString(quint8 classCode, quint8 subClass);
-    QString getProgIFString(quint8 classCode, quint8 subClass, quint8 progIF);
+    // Сканер PCI (отвечает за всю логику работы с PCI)
+    PciScannerGiveIO *scanner;
     
-    // Чтение дополнительных регистров PCI
-    DWORD readPCIConfigDword(quint8 bus, quint8 device, quint8 function, quint8 offset);
-
-    // GiveIO реализация
-    bool giveioInitialize();
-    void giveioShutdown();
-    void giveioOutPortDword(WORD port, DWORD value);
-    DWORD giveioInPortDword(WORD port);
-
-    HANDLE giveioHandle;
-    bool giveioInitialized;
-    
-    // Проверка прав администратора
-    bool isRunningAsAdmin();
+    // Локальная копия устройств для UI взаимодействия
+    QList<PCI_Device_GiveIO> pciDevices;
 };
 
 #endif // PCIWIDGET_GIVEIO_H
