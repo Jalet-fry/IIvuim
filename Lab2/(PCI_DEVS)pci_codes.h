@@ -1,8 +1,8 @@
 typedef struct _PCI_VENTABLE
 {
 	unsigned short	VenId ;
-	char *	VenShort ;
-	char *	VenFull ;
+	const char *	VenShort ;
+	const char *	VenFull ;
 }  PCI_VENTABLE, *PPCI_VENTABLE ;
 
 PCI_VENTABLE	PciVenTable [] =
@@ -1515,8 +1515,8 @@ typedef struct _PCI_DEVTABLE
 {
 	unsigned short	VenId ;
 	unsigned short	DevId ;
-	char *	Chip ;
-	char *	ChipDesc ;
+	const char *	Chip ;
+	const char *	ChipDesc ;
 }  PCI_DEVTABLE, *PPCI_DEVTABLE ;
 
 PCI_DEVTABLE	PciDevTable [] =
@@ -1602,11 +1602,11 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x121A, 0x0005, "Voodoo3", "All Voodoo3 chips, 3000" } ,
 	{ 0x121A, 0x0007, "Voodoo4", "" } ,
 	{ 0x121A, 0x0009, "Voodoo5", "" } ,
-	{ 0x121A, 0x0010, "Rampage", "Rev.A AGPx4, 0.25µ, 200/2x200 core/RAM" } ,
+	{ 0x121A, 0x0010, "Rampage", "Rev.A AGPx4, 0.25ï¿½, 200/2x200 core/RAM" } ,
 	{ 0x121A, 0x0057, "Voodoo 3/3000", "Avenger" } ,
 	{ 0x1220, 0x1220, "9622qac", "AMCC 5933 TMS320C80 DSP/Imaging Board" } ,
-	{ 0x1223, 0x0001, "KatanaQp", "Real-Time Processing Blade in a standard single-slot AdvancedTCA® formfactor" } ,
-	{ 0x1223, 0x0002, "KosaiPM", "Intel® Pentium-M® based AMC Module" } ,
+	{ 0x1223, 0x0001, "KatanaQp", "Real-Time Processing Blade in a standard single-slot AdvancedTCAï¿½ formfactor" } ,
+	{ 0x1223, 0x0002, "KosaiPM", "Intelï¿½ Pentium-Mï¿½ based AMC Module" } ,
 	{ 0x1223, 0x003, "Katana3752", "Advanced Tri-Processor Blade" } ,
 	{ 0x1223, 0x004, "Katana3750", "Advanced Tri-Processor Blade" } ,
 	{ 0x1223, 0x0044, "Memory controller", "Memory controller" } ,
@@ -2127,7 +2127,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x8086, 0x2411, "82801AA", "IDE Controller (UltraATA/66)" } ,
 	{ 0x8086, 0x2412, "82801AA", "USB Controller" } ,
 	{ 0x8086, 0x2413, "82801AA", "SMBus Controller" } ,
-	{ 0x8086, 0x2415, "Intel 82801DBM SM/BUS Controller 24C3", "Aureal (AD1881 SOUNDMAX) Placa Mãe Asaki P3-141" } ,
+	{ 0x8086, 0x2415, "Intel 82801DBM SM/BUS Controller 24C3", "Aureal (AD1881 SOUNDMAX) Placa Mï¿½e Asaki P3-141" } ,
 	{ 0x8086, 0x2416, "82801AA", "AC'97 Modem Controller" } ,
 	{ 0x8086, 0x2418, "82801AA", "Hub Interface-to-PCI Bridge" } ,
 	{ 0x8086, 0x2420, "82801AB", "LPC Interface" } ,
@@ -2364,10 +2364,10 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x8086, 0x4223, "2915ABG", "Intel (R) PRO/Wireless 2200BG Network Connection, (R) PRO/Wireless 2915ABG Network Connection" } ,
 	{ 0x8086, 0x4224, "Intel Pro Wireless 2915ABG", "802.11a/b/g WLan adapter" } ,
 	{ 0x8086, 0x4227, "3945ABG", "Intel(R) PRO/Wireless 3945ABG" } ,
-	{ 0x8086, 0x4229, "Intel 4965AGN", "Intel® Wireless WiFi Link 4965AGN(supporting 802.11a/b/g/Draft-N)" } ,
-	{ 0x8086, 0x422D, "Intel 4965AGN", "Intel® Wireless WiFi Link 4965AGN" } ,
-	{ 0x8086, 0x4230, "Intel 4965AGN", "Intel® Wireless WiFi Link 4965AGN" } ,
-	{ 0x8086, 0x4233, "Intel 4965AGN", "Intel® Wireless WiFi Link 4965AGN" } ,
+	{ 0x8086, 0x4229, "Intel 4965AGN", "Intelï¿½ Wireless WiFi Link 4965AGN(supporting 802.11a/b/g/Draft-N)" } ,
+	{ 0x8086, 0x422D, "Intel 4965AGN", "Intelï¿½ Wireless WiFi Link 4965AGN" } ,
+	{ 0x8086, 0x4230, "Intel 4965AGN", "Intelï¿½ Wireless WiFi Link 4965AGN" } ,
+	{ 0x8086, 0x4233, "Intel 4965AGN", "Intelï¿½ Wireless WiFi Link 4965AGN" } ,
 	{ 0x8086, 0x5001, "PRO/DSL 2100", "Modem - PPP" } ,
 	{ 0x8086, 0x5005, "PRO/DSL 2200", "Modem - PPPoA" } ,
 	{ 0x8086, 0x5200, "", "PCI to PCI Bridge" } ,
@@ -2388,7 +2388,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x8086, 0x7120, "82810", "Host-Hub Interface Bridge / DRAM Ctrlr" } ,
 	{ 0x8086, 0x7121, "82810", "Graphics Controller" } ,
 	{ 0x8086, 0x7122, "82810-DC100", "Host-Hub Interface Bridge / DRAM Ctrlr" } ,
-	{ 0x8086, 0x7123, "82810-DC100", "Intel® 82810 Graphics Controller" } ,
+	{ 0x8086, 0x7123, "82810-DC100", "Intelï¿½ 82810 Graphics Controller" } ,
 	{ 0x8086, 0x7124, "82810E", "Host-Hub Interface Bridge / DRAM Ctrlr" } ,
 	{ 0x8086, 0x7125, "82810E", "Intel Direct AGP 810 Chipset" } ,
 	{ 0x8086, 0x7126, "82810-DC133", "Host Bridge and Memory Controller Hub" } ,
@@ -2824,7 +2824,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x174B, 0x7C12, "RV280", "RADEON 9200 ATLANTIS - Secondary" } ,
 	{ 0x174B, 0x7C13, "RV280", "RADEON 9200 ATLANTIS" } ,
 	{ 0x17EE, 0x4153, "RV350", "Radeon 9550" } ,
-	{ 0x1328, 0x8888, "rev 1.5", "cPEG™ C 3.0 DVD/MPEG2 decoder" } ,
+	{ 0x1328, 0x8888, "rev 1.5", "cPEGï¿½ C 3.0 DVD/MPEG2 decoder" } ,
 	{ 0x16EC, 0x0116, "RTL8169S", "RealTek 8169S chip" } ,
 	{ 0x16EC, 0x1007, "0637", "U.S. Robotics 56K Win INT" } ,
 	{ 0x16EC, 0x2013, "11323A", "U.S. Robotics 56K Voice Host Int" } ,
@@ -3165,7 +3165,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x1002, 0x7010, "RS200", "PCI to AGP Bridge" } ,
 	{ 0x1002, 0x7109, "R520", "Radeon X1800 Series" } ,
 	{ 0x1002, 0x7142, "N/A", "Radeon X1300 Pro or X1550" } ,
-	{ 0x1002, 0x7145, "x1400", "PCI\VEN_1002&amp;DEV_7145&amp;SUBSYS_20031028&amp;REV_00\4&amp;1C9EC085&amp;0&amp;0008" } ,
+	{ 0x1002, 0x7145, "x1400", "PCI\\VEN_1002&amp;DEV_7145&amp;SUBSYS_20031028&amp;REV_00\\4&amp;1C9EC085&amp;0&amp;0008" } ,
 	{ 0x1002, 0x7146, "N/A", "Radeon X1300 XGE" } ,
 	{ 0x1002, 0x7149, "216CZJAKA12FAG", "ATI Mobility Radeon X1300, M52-64" } ,
 	{ 0x1002, 0x7183, "RV505", "Radeon X1300/X1550 Series" } ,
@@ -3889,7 +3889,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x104C, 0xAC10, "PCI1050", "PC Card Controller" } ,
 	{ 0x104C, 0xAC11, "PCI1030/1053", "PC Card Controller" } ,
 	{ 0x104C, 0xAC12, "PCI1130", "PC card CardBus Controller" } ,
-	{ 0x104C, 0xAC13, "PCI104c", "PCI\VEN_104C&amp;DEV_8038&amp;SUBSYS_01821028&amp;REV_00\4&amp;2FA23535&amp;0&amp;0DF0" } ,
+	{ 0x104C, 0xAC13, "PCI104c", "PCI\\VEN_104C&amp;DEV_8038&amp;SUBSYS_01821028&amp;REV_00\\4&amp;2FA23535&amp;0&amp;0DF0" } ,
 	{ 0x104C, 0xAC15, "PCI-1131", "CardBus Controller" } ,
 	{ 0x104C, 0xAC16, "PCI1250", "PC Card CardBus Controller" } ,
 	{ 0x104C, 0xAC17, "PCI1220", "CardBus Controller" } ,
@@ -3960,7 +3960,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x1054, 0x3505, "SH7751", "SuperH (SH) 32-Bit RISC MCU/MPU Series" } ,
 	{ 0x1055, 0x0810, "", "EFAR 486 host Bridge" } ,
 	{ 0x1055, 0x0922, "", "Pentium/p54c host Bridge" } ,
-	{ 0x1055, 0x0926, "I don´t know pentium 133 intel   everex setpnot mx", "ISA Bridge" } ,
+	{ 0x1055, 0x0926, "I donï¿½t know pentium 133 intel   everex setpnot mx", "ISA Bridge" } ,
 	{ 0x1055, 0x9130, "SLC90E66", "Ultra ATA/66 IDE Controller" } ,
 	{ 0x1055, 0x9460, "SLC90E66", "Victory66 PCI to ISA Bridge" } ,
 	{ 0x1055, 0x9461, "SLC90E66", "Victory66 UDMA EIDE Controller" } ,
@@ -4413,7 +4413,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x13D1, 0xAB02, "", "" } ,
 	{ 0x13D1, 0xAB03, "", "" } ,
 	{ 0x13D1, 0xAB06, "FE2000VX", "CardBus /Atelco Fibreline Ethernet Adptr" } ,
-	{ 0x13D1, 0xAB08, "SMC8035TX", "EZ Card™ 10/100 Fast Ethernet CardBus Adapter" } ,
+	{ 0x13D1, 0xAB08, "SMC8035TX", "EZ Cardï¿½ 10/100 Fast Ethernet CardBus Adapter" } ,
 	{ 0x13D7, 0x8086, "ac97", "note" } ,
 	{ 0x106B, 0x0001, "Bandit", "PowerPC Host-PCI Bridge" } ,
 	{ 0x106B, 0x0002, "Grand Central", "I/O Controller" } ,
@@ -4711,7 +4711,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x10A9, 0x2002, "ASDE", "" } ,
 	{ 0x10A9, 0x8001, "O2 1394", "" } ,
 	{ 0x10A9, 0x8002, "G-net NT", "" } ,
-	{ 0x10AB, 0x1005, "USB\VID_10AB&amp;PID_1005\5&amp;3783E499&amp;1&amp;1", "USB Bluetooth" } ,
+	{ 0x10AB, 0x1005, "USB\\VID_10AB&amp;PID_1005\\5&amp;3783E499&amp;1&amp;1", "USB Bluetooth" } ,
 	{ 0x10AD, 0x0001, "W83769F", "EIDE Ctrlr" } ,
 	{ 0x10AD, 0x0103, "sl82c103", "PCI-ide mode 4.5 Cntrlr" } ,
 	{ 0x10AD, 0x0105, "W83789F", "Sonata bus master PCI-IDE controller" } ,
@@ -5039,7 +5039,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x10DE, 0x0102, "NV10", "GeForce 256 Ultra" } ,
 	{ 0x10DE, 0x0103, "NV10GL", "Quadro (GeForce 256 GL)" } ,
 	{ 0x10DE, 0x0110, "NV11", "GeForce2 MX / MX 400" } ,
-	{ 0x10DE, 0x0111, "NV11DDR", "GeForce2 MX 100/200Ã‚Â  (DDR)" } ,
+	{ 0x10DE, 0x0111, "NV11DDR", "GeForce2 MX 100/200Ã‚ï¿½  (DDR)" } ,
 	{ 0x10DE, 0x0112, "NV11", "GeForce2 Go / MX Ultra" } ,
 	{ 0x10DE, 0x0112, "???", "Nvidia GeForce2 Go/MX Ultra Video Adapter" } ,
 	{ 0x10DE, 0x0113, "NV11GL", "Quadro2 MXR / EX / Go" } ,
@@ -5590,7 +5590,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x13F0, 0x0201, "ST201", "Fast Ehternet Adapter" } ,
 	{ 0x13F0, 0x0300, "NX1001", "Network Adapter" } ,
 	{ 0x13F0, 0x1023, "NX1101", "Gigabit Ethernet Controller" } ,
-	{ 0x13F0, 0x13F0, "-PCI\VEN_13F0&amp;DEV_1023&amp;SUBSYS_81801043&amp;REV_41\4&amp;BC", "ST201 Fast Ethernet Adapter" } ,
+	{ 0x13F0, 0x13F0, "-PCI\\VEN_13F0&amp;DEV_1023&amp;SUBSYS_81801043&amp;REV_41\\4&amp;BC", "ST201 Fast Ethernet Adapter" } ,
 	{ 0x1400, 0x0001, "", "" } ,
 	{ 0x1400, 0x0003, "", "" } ,
 	{ 0x1400, 0x0004, "m583mlr", "m583mlr" } ,
@@ -5669,7 +5669,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x14E4, 0x170D, "BCM5901", "NetXtreme 100Base-TX" } ,
 	{ 0x14E4, 0x170E, "BCM5901", "NetXtreme 100Base-TX" } ,
 	{ 0x14E4, 0x1713, "BCM5906", "Broadcom NetLink (TM) Fast Ethernet" } ,
-	{ 0x14E4, 0x3352, "BCM3352", "BCM3352 QAMLink® Single-Chip 4-Line VoIP" } ,
+	{ 0x14E4, 0x3352, "BCM3352", "BCM3352 QAMLinkï¿½ Single-Chip 4-Line VoIP" } ,
 	{ 0x14E4, 0x3360, "BCM3360", "Advanced PHY Broadband Gateway Cable Modem" } ,
 	{ 0x14E4, 0x4211, "BCM HPNA", "10Mb/s NIC" } ,
 	{ 0x14E4, 0x4212, "BCM V.92", "56k Modem" } ,
@@ -5728,7 +5728,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x14E4, 0x5680, "BCM5680", "G-Switch 8-Port Gigabit Ethernet Switch Controller" } ,
 	{ 0x14E4, 0x5690, "BCM5690", "12-port Multi-Layer Gigabit Ethernet Switch" } ,
 	{ 0x14E4, 0x5691, "BCM5691", "GE/10GE 8+2 Gigabit Ethernet Switch Controller" } ,
-	{ 0x14E4, 0x5802, "BCM5802", "The BCM5802 Security Processor integrates Broadcom’s IPSec engine (DES, 3DES, HMAC-SHA-1, HMAC-MD5)," } ,
+	{ 0x14E4, 0x5802, "BCM5802", "The BCM5802 Security Processor integrates Broadcomï¿½s IPSec engine (DES, 3DES, HMAC-SHA-1, HMAC-MD5)," } ,
 	{ 0x14E4, 0x5805, "BCM5805", "The BCM5805 Security Processor integrates a high-performance IPSec engine (DES, 3DES, HMAC-SHA-1, HM" } ,
 	{ 0x14E4, 0x5820, "BCM5820", "Crypto Accelerator" } ,
 	{ 0x14E4, 0x5821, "BCM5821", "Crypto Accelerator" } ,
@@ -6038,7 +6038,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x1166, 0x0225, "CSB5", "PCI Bridge" } ,
 	{ 0x1166, 0x0227, "CSB6", "PCI Bridge" } ,
 	{ 0x1166, 0x0230, "???", "PCI to ISA bridge" } ,
-	{ 0x1166, 0x0241, "BC4852", "8-Channel RAIDCore™ SATA RAID Host Bus Adapter" } ,
+	{ 0x1166, 0x0241, "BC4852", "8-Channel RAIDCoreï¿½ SATA RAID Host Bus Adapter" } ,
 	{ 0x1169, 0x0102, "QL5032", "32 Channel Digital Input Card Interface" } ,
 	{ 0x1169, 0x0202, "QL5032", "16 Channel Digital Output, 16 Channel Digital Input Interface" } ,
 	{ 0x1169, 0x0302, "QL5032", "32 Channel Analog Input Interface" } ,
@@ -6073,7 +6073,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x1179, 0x0618, "", "CPU to PCI and PCI to ISA Bridge" } ,
 	{ 0x1179, 0x0701, "vt82c693", "PCI Communication Device" } ,
 	{ 0x1179, 0x0804, "0x0804", "Toshiba Smart Media Host Controller" } ,
-	{ 0x1179, 0x0805, "PCI\VEN_1180&amp;DEV_0592&amp;SUBSYS_828D1033&amp;REV_06\4&amp;5A9", "SD Card Controller" } ,
+	{ 0x1179, 0x0805, "PCI\\VEN_1180&amp;DEV_0592&amp;SUBSYS_828D1033&amp;REV_06\\4&amp;5A9", "SD Card Controller" } ,
 	{ 0x1179, 0x0D01, "0x0D01", "FIR Port Type-O" } ,
 	{ 0x1179, 0x13A8, "XR17C158/154/152", "Multi-channel PCI UART" } ,
 	{ 0x117B, 0x8320, "GCE-8320B", "CD-R/RW Drive" } ,
@@ -6149,7 +6149,7 @@ PCI_DEVTABLE	PciDevTable [] =
 	{ 0x11AB, 0x0146, "GT-64010/A", "System Ctrlr for R4xxx/5000 Family CPUs" } ,
 	{ 0x11AB, 0x11AB, "88E8055 PCI-E", "Gigabit Ethernet Controler" } ,
 	{ 0x11AB, 0x13F8, "W8300", "802.11 Adapter" } ,
-	{ 0x11AB, 0x1fa6, "88W8310", "The Libertas™ WLAN 80211bg" } ,
+	{ 0x11AB, 0x1fa6, "88W8310", "The Libertasï¿½ WLAN 80211bg" } ,
 	{ 0x11AB, 0x1FAA, "8335", "Marvell Libertas 802.11b/g Wireless (8335)" } ,
 	{ 0x11AB, 0x4320, "88E8055", "PCI E gigabit" } ,
 	{ 0x11AB, 0x4350, "88E8036", "Yukon PCI-E Fast Ethernet Controller" } ,
@@ -6312,9 +6312,9 @@ typedef struct _PCI_CLASSCODETABLE
 	unsigned char	BaseClass ;
 	unsigned char	SubClass ;
 	unsigned char	ProgIf ;
-	char *		BaseDesc ;
-	char *		SubDesc ;
-	char *		ProgDesc ;
+	const char *		BaseDesc ;
+	const char *		SubDesc ;
+	const char *		ProgDesc ;
 }  PCI_CLASSCODETABLE, *PPCI_CLASSCODETABLE ;
 
 PCI_CLASSCODETABLE PciClassCodeTable [] =
@@ -6449,7 +6449,7 @@ PCI_CLASSCODETABLE PciClassCodeTable [] =
 // Use this value for loop control during searching:
 #define	PCI_CLASSCODETABLE_LEN	(sizeof(PciClassCodeTable)/sizeof(PCI_CLASSCODETABLE))
 
-char *	PciCommandFlags [] =
+const char *	PciCommandFlags [] =
 {
 	"I/O Access",
 	"Memory Access",
@@ -6473,7 +6473,7 @@ char *	PciCommandFlags [] =
 #define	PCI_COMMANDFLAGS_LEN	(sizeof(PciCommandFlags)/sizeof(char *))
 
 
-char *	PciStatusFlags [] =
+const char *	PciStatusFlags [] =
 {
 	"Reserved 0",
 	"Reserved 1",
@@ -6497,7 +6497,7 @@ char *	PciStatusFlags [] =
 #define	PCI_STATUSFLAGS_LEN	(sizeof(PciStatusFlags)/sizeof(char *))
 
 
-char *	PciDevSelFlags [] =
+const char *	PciDevSelFlags [] =
 {
 	"Fast Devsel Speed",     // TypeC
 	"Medium Devsel Speed",   // TypeB

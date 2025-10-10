@@ -13,11 +13,11 @@
 #include <QDebug>
 
 JakeWidget_XP::JakeWidget_XP(QWidget *parent)
-    : QWidget(parent), currentState(JakeState::FollowMouse), frame(0), t(0.0), 
-      smoothFactor(0.15), m_scale(1.0), m_rotation(0.0),
-      damping(0.85), acceleration(0.3), bouncePhase(0.0),
-      squashAmount(0.0), stretchAmount(0.0),
-      movieLabel(new QLabel(this)), movie(nullptr)
+    : QWidget(parent), currentState(JakeState::FollowMouse),
+      movie(nullptr), movieLabel(new QLabel(this)),
+      m_scale(1.0), m_rotation(0.0), t(0.0), frame(0),
+      smoothFactor(0.15), damping(0.85), acceleration(0.3),
+      bouncePhase(0.0), squashAmount(0.0), stretchAmount(0.0)
 {
     setAttribute(Qt::WA_TransparentForMouseEvents, false);
     setMouseTracking(true);

@@ -7,16 +7,16 @@
 typedef struct _PCI_VENTABLE
 {
     unsigned short VenId;
-    char *VenShort;
-    char *VenFull;
+    const char *VenShort;
+    const char *VenFull;
 } PCI_VENTABLE, *PPCI_VENTABLE;
 
 typedef struct _PCI_DEVTABLE
 {
     unsigned short VenId;
     unsigned short DevId;
-    char *Chip;
-    char *ChipDesc;
+    const char *Chip;
+    const char *ChipDesc;
 } PCI_DEVTABLE, *PPCI_DEVTABLE;
 
 // External references to tables (defined in pci_database.cpp)
