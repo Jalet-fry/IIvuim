@@ -10,6 +10,7 @@
 class BatteryWidget;
 class JakeWidget;
 class StorageWindow;
+class CameraWindow;
 
 class MainWindow : public QMainWindow
 {
@@ -36,6 +37,7 @@ private:
     BatteryWidget *batteryWidget;
     JakeWidget *jakeWidget;
     StorageWindow *storageWindow;
+    CameraWindow *cameraWindow;
     void setupJake();
     bool isHoveringButton;
     QPixmap backgroundPixmap;

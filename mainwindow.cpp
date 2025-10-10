@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "Lab1/batterywidget.h"
 #include "Lab3/storagewindow.h"
+#include "Lab4/camerawindow.h"
 #include "Animation/jakewidget.h"
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -20,7 +21,7 @@
 #include <QCoreApplication>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), storageWindow(nullptr), isHoveringButton(false), currentBackgroundIndex(0)
+    : QMainWindow(parent), batteryWidget(nullptr), jakeWidget(nullptr), storageWindow(nullptr), cameraWindow(nullptr), isHoveringButton(false), currentBackgroundIndex(0)
 {
     setWindowTitle("Лабораторные работы");
     setFixedSize(1200, 700);
@@ -150,6 +151,10 @@ MainWindow::~MainWindow()
         storageWindow->close();
         delete storageWindow;
     }
+    if (cameraWindow) {
+        cameraWindow->close();
+        delete cameraWindow;
+    }
     if (jakeWidget) {
         jakeWidget->close();
         delete jakeWidget;
@@ -210,7 +215,9 @@ void MainWindow::openLab3() {
 }
 
 void MainWindow::openLab4() {
-    QMessageBox::information(this, "ЛР 4", "Открываем лабораторную работу 4");
+    CameraWindow *cameraWin = new CameraWindow(nullptr);
+    cameraWin->show();
+    
     if (jakeWidget) {
         jakeWidget->onButtonClick();
     }
