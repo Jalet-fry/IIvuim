@@ -25,6 +25,9 @@ public:
 protected:
     // Для обработки глобальных горячих клавиш Windows
     bool nativeEvent(const QByteArray &eventType, void *message, long *result) override;
+    
+    // Обработка закрытия окна
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void onGetCameraInfo();

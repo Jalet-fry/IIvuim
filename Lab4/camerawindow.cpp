@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QSplitter>
 #include <QDebug>
+#include <QCloseEvent>
 #include <windows.h>
 
 CameraWindow::CameraWindow(QWidget *parent)
@@ -71,13 +72,48 @@ CameraWindow::CameraWindow(QWidget *parent)
 
 CameraWindow::~CameraWindow()
 {
+    qDebug() << "CameraWindow destructor called";
+    
     // Отменяем регистрацию глобальных горячих клавиш
     unregisterGlobalHotkeys();
     
     if (cameraWorker) {
+        qDebug() << "Stopping camera worker...";
         cameraWorker->stopAll();
         delete cameraWorker;
+        cameraWorker = nullptr;
     }
+    
+    qDebug() << "CameraWindow destroyed";
+}
+
+void CameraWindow::closeEvent(QCloseEvent *event)
+{
+    qDebug() << "CameraWindow closeEvent called";
+    
+    // Останавливаем запись если идет
+    if (isRecording || isVideoRecording) {
+        qDebug() << "Stopping recording on close...";
+        cameraWorker->stopVideoRecording();
+    }
+    
+    // Останавливаем превью и камеру
+    if (cameraWorker) {
+        qDebug() << "Stopping all camera operations...";
+        cameraWorker->stopAll();
+    }
+    
+    // Скрываем Jake
+    if (jakeWarning) {
+        jakeWarning->hideWarning();
+    }
+    
+    // Отменяем глобальные горячие клавиши
+    unregisterGlobalHotkeys();
+    
+    qDebug() << "CameraWindow closing properly";
+    
+    event->accept();
 }
 
 void CameraWindow::setupUI()
@@ -474,12 +510,23 @@ bool CameraWindow::nativeEvent(const QByteArray &eventType, void *message, long 
                     if (isRecording || isVideoRecording) {
                         qDebug() << "Автоматически останавливаем запись при показе окна";
                         cameraWorker->stopVideoRecording();
+                        // Обновляем UI
+                        isRecording = false;
+                        isVideoRecording = false;
+                        updateVideoButtonText();
+                        recordingBlinkTimer->stop();
+                        recordingIndicator->clear();
+                        recordingIndicator->setStyleSheet("QLabel { background-color: transparent; }");
                     }
+                    
+                    // Скрываем Jake
+                    jakeWarning->hideWarning();
                     
                     unregisterGlobalHotkeys(); // Отменяем глобальные клавиши
                     this->show();
                     this->raise();
                     this->activateWindow();
+                    statusLabel->setText("Статус: Окно восстановлено");
                     return true;
             }
         }
