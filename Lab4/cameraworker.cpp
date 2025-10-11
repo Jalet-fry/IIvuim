@@ -712,13 +712,27 @@ bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &
     for (int i = 0; i < frames.count(); ++i) {
         const QImage &frame = frames[i];
         
-        // Конвертируем QImage в RGB24 формат
-        QImage rgbFrame = frame.convertToFormat(QImage::Format_RGB888);
+        // Для видео нужно дополнительно перевернуть (превью и видео имеют разную ориентацию)
+        QImage flippedFrame = frame.mirrored(false, true);
+        
+        // Конвертируем в BGR24 формат (правильный порядок цветов для AVI)
+        QImage bgrFrame = flippedFrame.convertToFormat(QImage::Format_RGB888);
+        
+        // Конвертируем RGB -> BGR для правильного отображения цветов
+        for (int y = 0; y < bgrFrame.height(); ++y) {
+            for (int x = 0; x < bgrFrame.width(); ++x) {
+                QRgb pixel = bgrFrame.pixel(x, y);
+                int r = qRed(pixel);
+                int g = qGreen(pixel);
+                int b = qBlue(pixel);
+                bgrFrame.setPixel(x, y, qRgb(b, g, r)); // BGR порядок
+            }
+        }
         
         // Записываем кадр
         LONG written;
-        hr = AVIStreamWrite(pVideoStream, i, 1, rgbFrame.bits(), 
-                          rgbFrame.byteCount(), AVIIF_KEYFRAME, nullptr, &written);
+        hr = AVIStreamWrite(pVideoStream, i, 1, bgrFrame.bits(), 
+                          bgrFrame.byteCount(), AVIIF_KEYFRAME, nullptr, &written);
         
         if (FAILED(hr)) {
             qDebug() << "Failed to write frame" << i;
