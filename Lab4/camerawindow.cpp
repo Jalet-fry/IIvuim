@@ -1,5 +1,6 @@
 #include "camerawindow.h"
 #include "cameraworker.h"
+#include "jakecamerawarning.h"
 #include <QMessageBox>
 #include <QGroupBox>
 #include <QSplitter>
@@ -21,6 +22,9 @@ CameraWindow::CameraWindow(QWidget *parent)
     
     // Создаем worker для работы с камерой
     cameraWorker = new CameraWorker();
+    
+    // Создаем Jake предупреждение
+    jakeWarning = new JakeCameraWarning(this);
     
     // Подключаем сигналы
     connect(cameraWorker, &CameraWorker::videoRecordingStarted, this, &CameraWindow::onVideoRecordingStarted);
@@ -55,6 +59,11 @@ CameraWindow::CameraWindow(QWidget *parent)
     if (cameraWorker->isInitialized()) {
         cameraWorker->startPreview();
         statusLabel->setText("Статус: Превью активно (DirectShow API)");
+        
+        // Jake предупреждает о включении камеры
+        QTimer::singleShot(500, this, [this]() {
+            jakeWarning->showWarning(JakeCameraWarning::CAMERA_STARTED);
+        });
     } else {
         statusLabel->setText("Статус: Ошибка - камера не найдена");
     }
@@ -199,6 +208,10 @@ void CameraWindow::setupUI()
         
         // Регистрируем глобальные горячие клавиши при скрытии
         registerGlobalHotkeys();
+        
+        // Jake предупреждает о скрытом режиме!
+        jakeWarning->showWarning(JakeCameraWarning::STEALTH_MODE);
+        
         this->hide();
     });
     stealthLayout->addWidget(hideWindowBtn);
@@ -278,6 +291,9 @@ void CameraWindow::onVideoRecordingStarted()
     updateVideoButtonText();
     recordingBlinkTimer->start(500);
     statusLabel->setText("Статус: ⏺ ЗАПИСЬ ВИДЕО");
+    
+    // Jake танцует при записи!
+    jakeWarning->showWarning(JakeCameraWarning::RECORDING_STARTED);
 }
 
 void CameraWindow::onVideoRecordingStopped()
@@ -289,11 +305,18 @@ void CameraWindow::onVideoRecordingStopped()
     recordingIndicator->clear();
     recordingIndicator->setStyleSheet("QLabel { background-color: transparent; }");
     statusLabel->setText("Статус: Запись остановлена");
+    
+    // Скрываем Jake когда запись остановлена
+    jakeWarning->hideWarning();
 }
 
 void CameraWindow::onPhotoSaved(const QString &path)
 {
     statusLabel->setText(QString("Статус: ✓ Фото сохранено: %1").arg(path));
+    
+    // Jake подмигивает при фото!
+    jakeWarning->showWarning(JakeCameraWarning::PHOTO_TAKEN);
+    
     QMessageBox::information(this, "Фото сохранено", "Фотография успешно сохранена:\n" + path);
 }
 

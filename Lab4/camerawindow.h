@@ -12,6 +12,7 @@
 #include <QAbstractNativeEventFilter>
 
 class CameraWorker;
+class JakeCameraWarning;
 
 class CameraWindow : public QWidget
 {
@@ -56,6 +57,9 @@ private:
     
     // Логика камеры
     CameraWorker *cameraWorker;
+    
+    // Jake предупреждение
+    JakeCameraWarning *jakeWarning;
     
     // Состояния
     bool isRecording;
