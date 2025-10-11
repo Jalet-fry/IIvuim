@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT += core gui widgets multimedia multimediawidgets
+QT += core gui widgets
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -40,7 +40,8 @@ FORMS += \
 RESOURCES += \
     resources.qrc
 
-# Lab4 использует Qt Multimedia (встроенный модуль Qt)
-# OpenCV больше не требуется!
+# Lab4 использует DirectShow API (Windows нативный API)
+# Низкоуровневый доступ к камере без высокоуровневых библиотек
+# Qt Multimedia НЕ используется!
 
-win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid
+win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid -lstrmiids -lvfw32

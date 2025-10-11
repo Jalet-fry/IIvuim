@@ -3,17 +3,15 @@
 #include <QMessageBox>
 #include <QGroupBox>
 #include <QSplitter>
-#include <QCamera>
 
 CameraWindow::CameraWindow(QWidget *parent)
     : QWidget(parent),
       cameraWorker(nullptr),
       isRecording(false),
       isPreviewEnabled(true),
-      isStealthMode(false),
       recordingIndicatorVisible(false)
 {
-    setWindowTitle("ЛР 4: Работа с веб-камерой (Qt Multimedia)");
+    setWindowTitle("ЛР 4: Работа с веб-камерой (DirectShow API)");
     resize(1000, 700);
     
     setupUI();
@@ -27,6 +25,7 @@ CameraWindow::CameraWindow(QWidget *parent)
     connect(cameraWorker, &CameraWorker::photoSaved, this, &CameraWindow::onPhotoSaved);
     connect(cameraWorker, &CameraWorker::errorOccurred, this, &CameraWindow::onError);
     connect(cameraWorker, &CameraWorker::cameraInfoReady, this, &CameraWindow::onCameraInfoReady);
+    connect(cameraWorker, &CameraWorker::frameReady, this, &CameraWindow::onFrameReady);
     
     // Таймер для мигающего индикатора записи
     recordingBlinkTimer = new QTimer(this);
@@ -41,12 +40,10 @@ CameraWindow::CameraWindow(QWidget *parent)
         }
     });
     
-    // Подключаем камеру к viewfinder и запускаем
-    QCamera *camera = cameraWorker->getCamera();
-    if (camera) {
-        camera->setViewfinder(viewfinder);
+    // Запускаем превью
+    if (cameraWorker->isInitialized()) {
         cameraWorker->startPreview();
-        statusLabel->setText("Статус: Превью активно (Qt Multimedia)");
+        statusLabel->setText("Статус: Превью активно (DirectShow API)");
     } else {
         statusLabel->setText("Статус: Ошибка - камера не найдена");
     }
@@ -65,7 +62,7 @@ void CameraWindow::setupUI()
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     
     // Заголовок
-    QLabel *titleLabel = new QLabel("Управление веб-камерой (Qt Multimedia - без OpenCV!)");
+    QLabel *titleLabel = new QLabel("Управление веб-камерой (DirectShow API - Windows нативный)");
     titleLabel->setAlignment(Qt::AlignCenter);
     titleLabel->setStyleSheet(
         "QLabel { font-size: 20px; font-weight: bold; color: #1976D2; padding: 10px; }"
@@ -82,11 +79,13 @@ void CameraWindow::setupUI()
     QGroupBox *previewGroup = new QGroupBox("Превью камеры");
     QVBoxLayout *previewGroupLayout = new QVBoxLayout(previewGroup);
     
-    // QCameraViewfinder для отображения камеры
-    viewfinder = new QCameraViewfinder();
-    viewfinder->setMinimumSize(480, 360);
-    viewfinder->setStyleSheet("QCameraViewfinder { background-color: #000000; border: 2px solid #1976D2; }");
-    previewGroupLayout->addWidget(viewfinder);
+    // QLabel для отображения камеры
+    previewLabel = new QLabel("Ожидание кадров...");
+    previewLabel->setMinimumSize(640, 480);
+    previewLabel->setAlignment(Qt::AlignCenter);
+    previewLabel->setStyleSheet("QLabel { background-color: #000000; border: 2px solid #1976D2; color: white; }");
+    previewLabel->setScaledContents(false); // Сохраняем пропорции
+    previewGroupLayout->addWidget(previewLabel);
     
     // Индикатор записи
     recordingIndicator = new QLabel("");
@@ -136,16 +135,17 @@ void CameraWindow::setupUI()
     connect(takePhotoBtn, &QPushButton::clicked, this, &CameraWindow::onTakePhoto);
     controlGroupLayout->addWidget(takePhotoBtn);
     
-    startStopVideoBtn = new QPushButton("🎥 Запись видео (не поддерживается)");
-    startStopVideoBtn->setEnabled(false);
+    startStopVideoBtn = new QPushButton("🎥 Начать запись видео");
     startStopVideoBtn->setStyleSheet(
-        "QPushButton { background-color: #999; color: white; padding: 10px; border-radius: 4px; font-size: 14px; font-weight: bold; }"
+        "QPushButton { background-color: #FF5722; color: white; padding: 10px; border-radius: 4px; font-size: 14px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #E64A19; }"
+        "QPushButton:pressed { background-color: #D84315; }"
     );
     connect(startStopVideoBtn, &QPushButton::clicked, this, &CameraWindow::onStartStopVideo);
     controlGroupLayout->addWidget(startStopVideoBtn);
     
     // Примечание о видео
-    QLabel *videoNote = new QLabel("⚠️ Видеозапись требует системные кодеки.\nИспользуйте захват фото вместо видео.");
+    QLabel *videoNote = new QLabel("ℹ️ Видеозапись: упрощенная версия (серия кадров)");
     videoNote->setStyleSheet("QLabel { color: #666; font-size: 10px; padding: 2px; }");
     videoNote->setWordWrap(true);
     controlGroupLayout->addWidget(videoNote);
@@ -174,10 +174,8 @@ void CameraWindow::setupUI()
         QMessageBox::information(this, "Скрытый режим",
             "Окно будет скрыто.\n"
             "Камера продолжит работать.\n\n"
-            "Используйте 'Сделать фото' перед скрытием,\n"
-            "затем нажмите эту кнопку.\n\n"
             "Для возврата закройте приложение через\n"
-            "диспетчер задач или Alt+F4.");
+            "диспетчер задач или используйте Alt+Tab.");
         this->hide();
     });
     stealthLayout->addWidget(hideWindowBtn);
@@ -185,8 +183,8 @@ void CameraWindow::setupUI()
     QLabel *stealthInfo = new QLabel(
         "⚠️ Скрытый режим:\n"
         "• Нажмите кнопку выше чтобы скрыть окно\n"
-        "• Камера продолжит работать\n"
-        "• Для фото используйте таймер (Alt+Tab)"
+        "• Камера продолжит работать в фоне\n"
+        "• Можно делать фото/видео незаметно"
     );
     stealthInfo->setStyleSheet("QLabel { color: #666; font-size: 11px; padding: 5px; }");
     stealthInfo->setWordWrap(true);
@@ -226,7 +224,7 @@ void CameraWindow::onTakePhoto()
 void CameraWindow::onStartStopVideo()
 {
     if (!isRecording) {
-        statusLabel->setText("Статус: Запись видео (упрощенная)...");
+        statusLabel->setText("Статус: Запись видео...");
         cameraWorker->startVideoRecording();
     } else {
         statusLabel->setText("Статус: Остановка записи...");
@@ -246,12 +244,8 @@ void CameraWindow::onTogglePreview()
         cameraWorker->stopPreview();
         togglePreviewBtn->setText("▶ Запустить превью");
         statusLabel->setText("Статус: Превью остановлено");
+        previewLabel->setText("Превью остановлено");
     }
-}
-
-void CameraWindow::onToggleStealthMode()
-{
-    // Убрана checkbox, используется кнопка
 }
 
 void CameraWindow::onVideoRecordingStarted()
@@ -259,7 +253,7 @@ void CameraWindow::onVideoRecordingStarted()
     isRecording = true;
     updateVideoButtonText();
     recordingBlinkTimer->start(500);
-    statusLabel->setText("Статус: ⏺ ЗАПИСЬ (упрощенная реализация)");
+    statusLabel->setText("Статус: ⏺ ЗАПИСЬ ВИДЕО");
 }
 
 void CameraWindow::onVideoRecordingStopped()
@@ -289,6 +283,18 @@ void CameraWindow::onCameraInfoReady(const QString &info)
     infoTextEdit->setHtml(info);
 }
 
+void CameraWindow::onFrameReady(const QImage &frame)
+{
+    if (frame.isNull()) {
+        return;
+    }
+    
+    // Масштабируем изображение с сохранением пропорций
+    QPixmap pixmap = QPixmap::fromImage(frame);
+    QPixmap scaled = pixmap.scaled(previewLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    previewLabel->setPixmap(scaled);
+}
+
 void CameraWindow::updateVideoButtonText()
 {
     if (isRecording) {
@@ -307,4 +313,3 @@ void CameraWindow::updateVideoButtonText()
         );
     }
 }
-

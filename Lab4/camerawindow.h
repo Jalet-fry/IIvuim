@@ -7,9 +7,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTextEdit>
-#include <QCheckBox>
 #include <QTimer>
-#include <QCameraViewfinder>
 
 class CameraWorker;
 
@@ -26,19 +24,19 @@ private slots:
     void onTakePhoto();
     void onStartStopVideo();
     void onTogglePreview();
-    void onToggleStealthMode();
     void onVideoRecordingStarted();
     void onVideoRecordingStopped();
     void onPhotoSaved(const QString &path);
     void onError(const QString &error);
     void onCameraInfoReady(const QString &info);
+    void onFrameReady(const QImage &frame);
 
 private:
     void setupUI();
     void updateVideoButtonText();
 
     // UI элементы
-    QCameraViewfinder *viewfinder;  // Для отображения камеры
+    QLabel *previewLabel;           // Для отображения камеры
     QTextEdit *infoTextEdit;
     QPushButton *getCameraInfoBtn;
     QPushButton *takePhotoBtn;
@@ -53,7 +51,6 @@ private:
     // Состояния
     bool isRecording;
     bool isPreviewEnabled;
-    bool isStealthMode;
     
     // Таймер для индикатора записи
     QTimer *recordingBlinkTimer;

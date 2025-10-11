@@ -4,10 +4,13 @@
 #include <QObject>
 #include <QImage>
 #include <QString>
-#include <QCamera>
-#include <QCameraImageCapture>
-#include <QVideoFrame>
 #include <QTimer>
+#include <QMutex>
+#include <windows.h>
+#include <dshow.h>
+
+// Forward declarations
+struct ISampleGrabber;
 
 class CameraWorker : public QObject
 {
@@ -17,9 +20,6 @@ public:
     explicit CameraWorker(QObject *parent = nullptr);
     ~CameraWorker();
 
-    // Получить объект камеры для превью
-    QCamera* getCamera() const { return camera; }
-    
     // Управление превью
     void startPreview();
     void stopPreview();
@@ -36,6 +36,9 @@ public:
     
     // Остановка всего
     void stopAll();
+    
+    // Проверка инициализации
+    bool isInitialized() const { return m_initialized; }
 
 signals:
     void frameReady(const QImage &frame);
@@ -46,16 +49,12 @@ signals:
     void cameraInfoReady(const QString &info);
 
 private slots:
-    void onImageCaptured(int id, const QImage &preview);
-    void onImageSaved(int id, const QString &fileName);
-    void onCaptureError(int id, QCameraImageCapture::Error error, const QString &errorString);
-    void onCameraError(QCamera::Error error);
-    void captureVideoFrame();
+    void captureFrame();
 
 private:
-    // Инициализация камеры
-    bool initializeCamera();
-    void releaseCamera();
+    // Инициализация DirectShow
+    bool initializeDirectShow();
+    void releaseDirectShow();
     
     // Генерация имени файла с датой и временем
     QString generateFileName(const QString &prefix, const QString &extension);
@@ -66,23 +65,44 @@ private:
     // Получение информации о камере через Windows API
     QString getCameraInfoWindows();
     
-    // Qt Multimedia объекты
-    QCamera *camera;
-    QCameraImageCapture *imageCapture;
+    // Захват текущего кадра из DirectShow
+    QImage captureCurrentFrame();
     
-    // Таймер для захвата кадров (для превью и видео)
-    QTimer *captureTimer;
-    QTimer *videoFrameTimer;
+    // Сохранение кадра в файл
+    bool saveFrame(const QImage &frame, const QString &filePath);
+    
+    // Сохранение видео в AVI файл
+    bool saveVideoToAVI(const QString &filePath, const QList<QImage> &frames, int width, int height);
+    
+    // DirectShow интерфейсы
+    IGraphBuilder *m_pGraph;
+    ICaptureGraphBuilder2 *m_pCapture;
+    IMediaControl *m_pMediaControl;
+    IBaseFilter *m_pVideoCapture;
+    ISampleGrabber *m_pGrabber;
+    IBaseFilter *m_pGrabberF;
+    
+    // Таймер для захвата кадров
+    QTimer *m_captureTimer;
+    QTimer *m_videoFrameTimer;
+    
+    // Мьютекс для потокобезопасности
+    QMutex m_mutex;
     
     // Состояния
-    bool isPreviewActive;
-    bool isRecordingVideo;
-    bool isCameraInitialized;
+    bool m_initialized;
+    bool m_isPreviewActive;
+    bool m_isRecordingVideo;
     
-    // Для записи видео (простая реализация через серию кадров)
-    QList<QImage> videoFrames;
-    QString currentVideoPath;
-    int videoFrameCount;
+    // Буфер для текущего кадра
+    QImage m_currentFrame;
+    
+    // Для записи видео (упрощенная версия - сохранение кадров)
+    QList<QImage> m_videoFrames;
+    QString m_currentVideoPath;
+    int m_videoFrameCount;
+    int m_videoFrameWidth;
+    int m_videoFrameHeight;
 };
 
 #endif // CAMERAWORKER_H

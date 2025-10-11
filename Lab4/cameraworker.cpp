@@ -3,153 +3,303 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QDebug>
-#include <QCameraInfo>
-#include <QImageWriter>
 #include <QBuffer>
+#include <QThread>
 
 // Windows API includes для информации о камере
 #include <windows.h>
 #include <setupapi.h>
 #include <devguid.h>
 #include <initguid.h>
+#include <dshow.h>
+#include <qedit.h>
+
+// Для работы с AVI файлами
+#include <vfw.h>
+#include <mmreg.h>
+
+// Линковка библиотек задана в IIvuim.pro
+// MinGW не поддерживает #pragma comment
 
 // Определяем GUID_DEVCLASS_CAMERA если не определён
 #ifndef GUID_DEVCLASS_CAMERA
 DEFINE_GUID(GUID_DEVCLASS_CAMERA, 0xca3e7ab9, 0xb4c3, 0x4ae6, 0x82, 0x51, 0x57, 0x9e, 0xf9, 0x33, 0x89, 0x0f);
 #endif
 
+// ISampleGrabber interface (qedit.h может не содержать все определения)
+EXTERN_C const CLSID CLSID_SampleGrabber;
+EXTERN_C const CLSID CLSID_NullRenderer;
+EXTERN_C const IID IID_ISampleGrabber;
+
+// Forward declaration вспомогательной функции
+void FreeMediaType(AM_MEDIA_TYPE& mt);
+
 CameraWorker::CameraWorker(QObject *parent)
     : QObject(parent),
-      camera(nullptr),
-      imageCapture(nullptr),
-      captureTimer(nullptr),
-      videoFrameTimer(nullptr),
-      isPreviewActive(false),
-      isRecordingVideo(false),
-      isCameraInitialized(false),
-      videoFrameCount(0)
+      m_pGraph(nullptr),
+      m_pCapture(nullptr),
+      m_pMediaControl(nullptr),
+      m_pVideoCapture(nullptr),
+      m_pGrabber(nullptr),
+      m_pGrabberF(nullptr),
+      m_captureTimer(nullptr),
+      m_videoFrameTimer(nullptr),
+      m_initialized(false),
+      m_isPreviewActive(false),
+      m_isRecordingVideo(false),
+      m_videoFrameCount(0),
+      m_videoFrameWidth(640),
+      m_videoFrameHeight(480)
 {
-    // Таймеры создадим при необходимости
+    // Инициализируем COM
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+    
+    // Инициализируем VFW для работы с AVI
+    AVIFileInit();
+    
+    // Создаем таймеры
+    m_captureTimer = new QTimer(this);
+    connect(m_captureTimer, &QTimer::timeout, this, &CameraWorker::captureFrame);
+    
+    m_videoFrameTimer = new QTimer(this);
+    connect(m_videoFrameTimer, &QTimer::timeout, this, &CameraWorker::captureFrame);
+    
+    // Инициализируем DirectShow
+    if (!initializeDirectShow()) {
+        qDebug() << "Failed to initialize DirectShow";
+        emit errorOccurred("Не удалось инициализировать камеру");
+    }
 }
 
 CameraWorker::~CameraWorker()
 {
     stopAll();
-    releaseCamera();
+    releaseDirectShow();
+    
+    // Освобождаем VFW
+    AVIFileExit();
+    
+    CoUninitialize();
 }
 
-bool CameraWorker::initializeCamera()
+bool CameraWorker::initializeDirectShow()
 {
-    if (isCameraInitialized) {
+    if (m_initialized) {
         return true;
     }
     
-    try {
-        // Получаем список доступных камер
-        QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-        
-        if (cameras.isEmpty()) {
-            emit errorOccurred("Не найдено ни одной камеры!");
+    HRESULT hr;
+    
+    // Создаем Filter Graph Manager
+    hr = CoCreateInstance(CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER,
+                         IID_IGraphBuilder, (void**)&m_pGraph);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to create FilterGraph:" << hr;
+        return false;
+    }
+    
+    // Создаем Capture Graph Builder
+    hr = CoCreateInstance(CLSID_CaptureGraphBuilder2, NULL, CLSCTX_INPROC_SERVER,
+                         IID_ICaptureGraphBuilder2, (void**)&m_pCapture);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to create CaptureGraphBuilder2:" << hr;
+        m_pGraph->Release();
+        m_pGraph = nullptr;
             return false;
         }
         
-        // Используем первую доступную камеру
-        QCameraInfo cameraInfo = cameras.first();
-        qDebug() << "Инициализация камеры:" << cameraInfo.description();
-        
-        camera = new QCamera(cameraInfo);
-        
-        // Обработка ошибок камеры
-        connect(camera, static_cast<void(QCamera::*)(QCamera::Error)>(&QCamera::error),
-                this, &CameraWorker::onCameraError);
-        
-        // Создаем объект для захвата изображений
-        imageCapture = new QCameraImageCapture(camera);
-        imageCapture->setCaptureDestination(QCameraImageCapture::CaptureToFile);
-        
-        // Подключаем сигналы
-        connect(imageCapture, &QCameraImageCapture::imageCaptured,
-                this, &CameraWorker::onImageCaptured);
-        connect(imageCapture, &QCameraImageCapture::imageSaved,
-                this, &CameraWorker::onImageSaved);
-        connect(imageCapture, static_cast<void(QCameraImageCapture::*)(int, QCameraImageCapture::Error, const QString&)>(&QCameraImageCapture::error),
-                this, &CameraWorker::onCaptureError);
-        
-        isCameraInitialized = true;
-        qDebug() << "Камера успешно инициализирована";
-        return true;
-    }
-    catch (...) {
-        emit errorOccurred("Ошибка инициализации камеры");
+    // Связываем Capture Graph с Filter Graph
+    hr = m_pCapture->SetFiltergraph(m_pGraph);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to set filter graph:" << hr;
+        releaseDirectShow();
         return false;
     }
+    
+    // Получаем интерфейс Media Control
+    hr = m_pGraph->QueryInterface(IID_IMediaControl, (void**)&m_pMediaControl);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to get MediaControl:" << hr;
+        releaseDirectShow();
+        return false;
+    }
+    
+    // Создаем Video Capture Device
+    ICreateDevEnum *pDevEnum = nullptr;
+    IEnumMoniker *pEnum = nullptr;
+    
+    hr = CoCreateInstance(CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER,
+                         IID_ICreateDevEnum, (void**)&pDevEnum);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to create DeviceEnumerator:" << hr;
+        releaseDirectShow();
+        return false;
+    }
+    
+    hr = pDevEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory, &pEnum, 0);
+    if (hr == S_OK) {
+        IMoniker *pMoniker = nullptr;
+        if (pEnum->Next(1, &pMoniker, NULL) == S_OK) {
+            hr = pMoniker->BindToObject(NULL, NULL, IID_IBaseFilter, (void**)&m_pVideoCapture);
+            pMoniker->Release();
+        }
+        pEnum->Release();
+    }
+    pDevEnum->Release();
+    
+    if (m_pVideoCapture == nullptr) {
+        qDebug() << "No video capture device found";
+        emit errorOccurred("Камера не найдена");
+        releaseDirectShow();
+        return false;
+    }
+    
+    // Добавляем Video Capture в граф
+    hr = m_pGraph->AddFilter(m_pVideoCapture, L"Video Capture");
+    if (FAILED(hr)) {
+        qDebug() << "Failed to add video capture filter:" << hr;
+        releaseDirectShow();
+        return false;
+    }
+    
+    // Создаем Sample Grabber для захвата кадров
+    hr = CoCreateInstance(CLSID_SampleGrabber, NULL, CLSCTX_INPROC_SERVER,
+                         IID_IBaseFilter, (void**)&m_pGrabberF);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to create SampleGrabber filter:" << hr;
+        // Продолжаем без grabber'а (не критично)
+    } else {
+        hr = m_pGraph->AddFilter(m_pGrabberF, L"Sample Grabber");
+        if (SUCCEEDED(hr)) {
+            hr = m_pGrabberF->QueryInterface(IID_ISampleGrabber, (void**)&m_pGrabber);
+            if (SUCCEEDED(hr)) {
+                // Настраиваем Sample Grabber
+                AM_MEDIA_TYPE mt;
+                ZeroMemory(&mt, sizeof(AM_MEDIA_TYPE));
+                mt.majortype = MEDIATYPE_Video;
+                mt.subtype = MEDIASUBTYPE_RGB24;
+                m_pGrabber->SetMediaType(&mt);
+                m_pGrabber->SetBufferSamples(TRUE);
+                m_pGrabber->SetOneShot(FALSE);
+            }
+        }
+    }
+    
+    // Создаем NULL Renderer (чтобы граф работал без отображения)
+    IBaseFilter *pNullRenderer = nullptr;
+    hr = CoCreateInstance(CLSID_NullRenderer, NULL, CLSCTX_INPROC_SERVER,
+                         IID_IBaseFilter, (void**)&pNullRenderer);
+    if (SUCCEEDED(hr)) {
+        m_pGraph->AddFilter(pNullRenderer, L"Null Renderer");
+        
+        // Соединяем фильтры
+        if (m_pGrabberF) {
+            m_pCapture->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
+                                    m_pVideoCapture, m_pGrabberF, pNullRenderer);
+        } else {
+            m_pCapture->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
+                                    m_pVideoCapture, nullptr, pNullRenderer);
+        }
+        
+        pNullRenderer->Release();
+    }
+    
+    m_initialized = true;
+    qDebug() << "DirectShow initialized successfully";
+    
+    return true;
 }
 
-void CameraWorker::releaseCamera()
+void CameraWorker::releaseDirectShow()
 {
-    if (camera) {
-        if (camera->state() == QCamera::ActiveState) {
-            camera->stop();
-        }
-        camera->deleteLater();
-        camera = nullptr;
+    if (m_pMediaControl) {
+        m_pMediaControl->Stop();
+        m_pMediaControl->Release();
+        m_pMediaControl = nullptr;
     }
     
-    if (imageCapture) {
-        imageCapture->deleteLater();
-        imageCapture = nullptr;
+    if (m_pGrabber) {
+        m_pGrabber->Release();
+        m_pGrabber = nullptr;
     }
     
-    if (captureTimer) {
-        captureTimer->stop();
-        captureTimer->deleteLater();
-        captureTimer = nullptr;
+    if (m_pGrabberF) {
+        m_pGraph->RemoveFilter(m_pGrabberF);
+        m_pGrabberF->Release();
+        m_pGrabberF = nullptr;
     }
     
-    if (videoFrameTimer) {
-        videoFrameTimer->stop();
-        videoFrameTimer->deleteLater();
-        videoFrameTimer = nullptr;
+    if (m_pVideoCapture) {
+        m_pGraph->RemoveFilter(m_pVideoCapture);
+        m_pVideoCapture->Release();
+        m_pVideoCapture = nullptr;
     }
     
-    isCameraInitialized = false;
+    if (m_pCapture) {
+        m_pCapture->Release();
+        m_pCapture = nullptr;
+    }
+    
+    if (m_pGraph) {
+        m_pGraph->Release();
+        m_pGraph = nullptr;
+    }
+    
+    m_initialized = false;
 }
 
 void CameraWorker::startPreview()
 {
-    if (!initializeCamera()) {
+    if (!m_initialized) {
+        if (!initializeDirectShow()) {
         return;
+        }
     }
     
-    isPreviewActive = true;
-    
-    if (camera->state() != QCamera::ActiveState) {
-        camera->start();
+    if (m_pMediaControl) {
+        HRESULT hr = m_pMediaControl->Run();
+        if (SUCCEEDED(hr)) {
+            m_isPreviewActive = true;
+            m_captureTimer->start(33); // ~30 FPS
+            qDebug() << "Preview started";
+        } else {
+            qDebug() << "Failed to start preview:" << hr;
+            emit errorOccurred("Не удалось запустить превью");
+        }
     }
-    
-    qDebug() << "Превью запущено";
 }
 
 void CameraWorker::stopPreview()
 {
-    isPreviewActive = false;
+    m_captureTimer->stop();
     
-    if (!isRecordingVideo && camera && camera->state() == QCamera::ActiveState) {
-        camera->stop();
+    if (!m_isRecordingVideo && m_pMediaControl) {
+        m_pMediaControl->Stop();
     }
     
-    qDebug() << "Превью остановлено";
+    m_isPreviewActive = false;
+    qDebug() << "Preview stopped";
 }
 
 void CameraWorker::takePhoto()
 {
-    if (!initializeCamera()) {
+    if (!m_initialized) {
+        emit errorOccurred("Камера не инициализирована");
         return;
     }
     
-    // Запускаем камеру если не запущена
-    if (camera->state() != QCamera::ActiveState) {
-        camera->start();
+    // Запускаем граф если не запущен
+    if (!m_isPreviewActive && m_pMediaControl) {
+        m_pMediaControl->Run();
+        QThread::msleep(500); // Даём камере прогреться
+    }
+    
+    // Захватываем текущий кадр
+    QImage frame = captureCurrentFrame();
+    
+    if (frame.isNull()) {
+        emit errorOccurred("Не удалось захватить кадр");
+        return;
     }
     
     // Генерируем путь для сохранения
@@ -157,32 +307,81 @@ void CameraWorker::takePhoto()
     QString fileName = generateFileName("photo", "jpg");
     QString fullPath = outputDir + "/" + fileName;
     
-    // Устанавливаем путь сохранения
-    imageCapture->capture(fullPath);
+    // Сохраняем кадр
+    if (saveFrame(frame, fullPath)) {
+        emit photoSaved(fullPath);
+        qDebug() << "Photo saved:" << fullPath;
+    } else {
+        emit errorOccurred("Не удалось сохранить фото");
+    }
     
-    qDebug() << "Захват фото:" << fullPath;
+    // Останавливаем граф если превью не активно
+    if (!m_isPreviewActive && m_pMediaControl) {
+        m_pMediaControl->Stop();
+    }
 }
 
 void CameraWorker::startVideoRecording()
 {
-    // Qt 5.5 с MinGW не поддерживает полноценную запись видео без установленных кодеков
-    // Для записи видео нужен QMediaRecorder + системные DirectShow кодеки
-    emit errorOccurred(
-        "Запись видео в Qt 5.5 требует:\n"
-        "1. Установленные системные кодеки (K-Lite Codec Pack)\n"
-        "2. QMediaRecorder (требует дополнительной реализации)\n\n"
-        "Текущая версия поддерживает только захват фото.\n"
-        "Для скрытого режима используйте фото с таймером."
-    );
+    if (!m_initialized) {
+        emit errorOccurred("Камера не инициализирована");
+        return;
+    }
     
-    qDebug() << "Запись видео не поддерживается в текущей конфигурации";
+    // Очищаем буфер кадров
+    m_videoFrames.clear();
+    m_videoFrameCount = 0;
+    
+    // Генерируем путь для видео
+    QString outputDir = getOutputDirectory();
+    QString fileName = generateFileName("video", "avi");
+    m_currentVideoPath = outputDir + "/" + fileName;
+    
+    // Запускаем граф если не запущен
+    if (m_pMediaControl) {
+        m_pMediaControl->Run();
+    }
+    
+    // Запускаем таймер захвата кадров для видео
+    m_isRecordingVideo = true;
+    m_videoFrameTimer->start(33); // ~30 FPS
+    
+    emit videoRecordingStarted();
+    qDebug() << "Video recording started";
 }
 
 void CameraWorker::stopVideoRecording()
 {
-    // Заглушка
-    isRecordingVideo = false;
+    if (!m_isRecordingVideo) {
+        return;
+    }
+    
+    m_videoFrameTimer->stop();
+    m_isRecordingVideo = false;
+    
+    // Сохраняем видео в настоящий AVI файл
+    if (!m_videoFrames.isEmpty()) {
+        bool success = saveVideoToAVI(m_currentVideoPath, m_videoFrames, m_videoFrameWidth, m_videoFrameHeight);
+        if (success) {
+            qDebug() << "Video recording saved as AVI:" << m_currentVideoPath << "-" << m_videoFrames.count() << "frames";
+        } else {
+            qDebug() << "Failed to save video as AVI, falling back to frames";
+            // Fallback: сохраняем первый кадр
+            QString firstFramePath = m_currentVideoPath;
+            firstFramePath.replace(".avi", "_frame_000.jpg");
+            saveFrame(m_videoFrames.first(), firstFramePath);
+        }
+    }
+    
+    m_videoFrames.clear();
+    
     emit videoRecordingStopped();
+    qDebug() << "Video recording stopped";
+    
+    // Останавливаем граф если превью не активно
+    if (!m_isPreviewActive && m_pMediaControl) {
+        m_pMediaControl->Stop();
+    }
 }
 
 void CameraWorker::getCameraInfo()
@@ -193,33 +392,15 @@ void CameraWorker::getCameraInfo()
         info = "<p><b>Информация через Windows API недоступна</b></p>";
     }
     
-    // Добавляем информацию от Qt
-    info += "<hr><p><b>Информация от Qt Multimedia:</b></p>";
+    // Добавляем информацию от DirectShow
+    info += "<hr><p><b>Информация от DirectShow:</b></p>";
     
-    QList<QCameraInfo> cameras = QCameraInfo::availableCameras();
-    
-    if (cameras.isEmpty()) {
-        info += "<p>Камеры не найдены</p>";
+    if (m_pVideoCapture) {
+        info += "<p><b>Статус:</b> Камера подключена</p>";
+        info += "<p><b>API:</b> DirectShow (Windows нативный)</p>";
+        info += QString("<p><b>Разрешение:</b> %1x%2</p>").arg(m_videoFrameWidth).arg(m_videoFrameHeight);
     } else {
-        for (int i = 0; i < cameras.size(); ++i) {
-            const QCameraInfo &cameraInfo = cameras[i];
-            info += QString("<p><b>Камера #%1:</b></p>").arg(i + 1);
-            info += QString("<p><b>Название:</b> %1</p>").arg(cameraInfo.description());
-            info += QString("<p><b>Устройство:</b> %1</p>").arg(cameraInfo.deviceName());
-            info += QString("<p><b>Позиция:</b> %1</p>").arg(
-                cameraInfo.position() == QCamera::FrontFace ? "Фронтальная" :
-                cameraInfo.position() == QCamera::BackFace ? "Задняя" : "Неизвестно"
-            );
-            info += QString("<p><b>Ориентация:</b> %1°</p>").arg(cameraInfo.orientation());
-            
-            if (i == 0) {
-                info += "<p><i>(используется по умолчанию)</i></p>";
-            }
-            
-            if (i < cameras.size() - 1) {
-                info += "<hr>";
-            }
-        }
+        info += "<p>Камера не найдена</p>";
     }
     
     emit cameraInfoReady(info);
@@ -227,67 +408,104 @@ void CameraWorker::getCameraInfo()
 
 void CameraWorker::stopAll()
 {
-    if (isRecordingVideo) {
+    if (m_isRecordingVideo) {
         stopVideoRecording();
     }
     
     stopPreview();
 }
 
-void CameraWorker::onImageCaptured(int id, const QImage &preview)
+void CameraWorker::captureFrame()
 {
-    Q_UNUSED(id);
-    
-    // Отправляем превью фото
-    if (!preview.isNull()) {
-        emit frameReady(preview);
-    }
-}
-
-void CameraWorker::onImageSaved(int id, const QString &fileName)
-{
-    Q_UNUSED(id);
-    emit photoSaved(fileName);
-    qDebug() << "Фото сохранено:" << fileName;
-}
-
-void CameraWorker::onCaptureError(int id, QCameraImageCapture::Error error, const QString &errorString)
-{
-    Q_UNUSED(id);
-    Q_UNUSED(error);
-    emit errorOccurred("Ошибка захвата изображения: " + errorString);
-}
-
-void CameraWorker::onCameraError(QCamera::Error error)
-{
-    QString errorMsg;
-    switch (error) {
-        case QCamera::NoError:
-            return;
-        case QCamera::CameraError:
-            errorMsg = "Общая ошибка камеры";
-            break;
-        case QCamera::InvalidRequestError:
-            errorMsg = "Неверный запрос к камере";
-            break;
-        case QCamera::ServiceMissingError:
-            errorMsg = "Сервис камеры недоступен";
-            break;
-        case QCamera::NotSupportedFeatureError:
-            errorMsg = "Функция не поддерживается";
-            break;
-        default:
-            errorMsg = "Неизвестная ошибка камеры";
+    if (!m_pGrabber) {
+        return;
     }
     
-    emit errorOccurred(errorMsg);
+    QMutexLocker locker(&m_mutex);
+    
+    long bufferSize = 0;
+    HRESULT hr = m_pGrabber->GetCurrentBuffer(&bufferSize, NULL);
+    if (FAILED(hr) || bufferSize == 0) {
+        return;
+    }
+    
+    char *pBuffer = new char[bufferSize];
+    hr = m_pGrabber->GetCurrentBuffer(&bufferSize, (long*)pBuffer);
+    
+    if (SUCCEEDED(hr)) {
+        // Получаем формат кадра
+        AM_MEDIA_TYPE mt;
+        hr = m_pGrabber->GetConnectedMediaType(&mt);
+        if (SUCCEEDED(hr) && mt.formattype == FORMAT_VideoInfo) {
+            VIDEOINFOHEADER *pVih = (VIDEOINFOHEADER*)mt.pbFormat;
+            
+            int width = pVih->bmiHeader.biWidth;
+            int height = abs(pVih->bmiHeader.biHeight);
+            
+            m_videoFrameWidth = width;
+            m_videoFrameHeight = height;
+            
+            // Создаем QImage из буфера
+            QImage frame(width, height, QImage::Format_RGB888);
+            
+            // Копируем данные (BGR -> RGB и переворачиваем)
+            for (int y = 0; y < height; y++) {
+                uchar *dest = frame.scanLine(height - 1 - y);
+                const uchar *src = (const uchar*)(pBuffer + y * width * 3);
+                
+                for (int x = 0; x < width; x++) {
+                    dest[x * 3 + 0] = src[x * 3 + 2]; // R
+                    dest[x * 3 + 1] = src[x * 3 + 1]; // G
+                    dest[x * 3 + 2] = src[x * 3 + 0]; // B
+                }
+            }
+            
+            m_currentFrame = frame;
+            
+            // Отправляем кадр для превью
+            if (m_isPreviewActive) {
+                emit frameReady(frame);
+            }
+            
+            // Сохраняем кадр для видео
+            if (m_isRecordingVideo) {
+                m_videoFrames.append(frame);
+                m_videoFrameCount++;
+                
+                // Ограничиваем количество кадров (чтобы не забить память)
+                if (m_videoFrames.count() > 300) { // ~10 секунд при 30 FPS
+                    m_videoFrames.removeFirst();
+                }
+            }
+            
+            FreeMediaType(mt);
+        }
+    }
+    
+    delete[] pBuffer;
 }
 
-void CameraWorker::captureVideoFrame()
+QImage CameraWorker::captureCurrentFrame()
 {
-    // Эта функция была бы использована для захвата кадров видео
-    // В Qt 5.5 без дополнительных модулей это сложно реализовать
-    // Оставляем заглушку для возможного расширения
+    // Ждем захвата кадра
+    for (int i = 0; i < 10; i++) {
+        QThread::msleep(50);
+        QMutexLocker locker(&m_mutex);
+        if (!m_currentFrame.isNull()) {
+            return m_currentFrame;
+        }
+    }
+    
+    return QImage();
+}
+
+bool CameraWorker::saveFrame(const QImage &frame, const QString &filePath)
+{
+    if (frame.isNull()) {
+        return false;
+    }
+    
+    return frame.save(filePath, "JPG", 90);
 }
 
 QString CameraWorker::generateFileName(const QString &prefix, const QString &extension)
@@ -305,9 +523,9 @@ QString CameraWorker::getOutputDirectory()
     QDir dir;
     if (!dir.exists(outputPath)) {
         if (dir.mkpath(outputPath)) {
-            qDebug() << "Создана папка для сохранения:" << outputPath;
+            qDebug() << "Created output directory:" << outputPath;
         } else {
-            qWarning() << "Не удалось создать папку:" << outputPath;
+            qWarning() << "Failed to create directory:" << outputPath;
             outputPath = QDir::currentPath();
         }
     }
@@ -384,7 +602,7 @@ QString CameraWorker::getCameraInfoWindows()
             }
             
             if (cameraCount == 1) {
-                result += "<p><b>Информация через Windows API:</b></p>";
+                result += "<p><b>Информация через Windows Setup API:</b></p>";
             }
             
             result += QString("<hr><p><b>Устройство #%1</b></p>").arg(cameraCount);
@@ -416,4 +634,102 @@ QString CameraWorker::getCameraInfoWindows()
     }
     
     return result;
+}
+
+// Вспомогательная функция для освобождения AM_MEDIA_TYPE
+void FreeMediaType(AM_MEDIA_TYPE& mt)
+{
+    if (mt.cbFormat != 0) {
+        CoTaskMemFree((PVOID)mt.pbFormat);
+        mt.cbFormat = 0;
+        mt.pbFormat = NULL;
+    }
+    if (mt.pUnk != NULL) {
+        mt.pUnk->Release();
+        mt.pUnk = NULL;
+    }
+}
+
+// Сохранение видео в AVI файл
+bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &frames, int width, int height)
+{
+    if (frames.isEmpty()) {
+        return false;
+    }
+    
+    // Конвертируем QString в wchar_t для Windows API
+    std::wstring wFilePath = filePath.toStdWString();
+    
+    // Создаем AVI файл
+    PAVIFILE pAviFile = nullptr;
+    HRESULT hr = AVIFileOpenW(&pAviFile, wFilePath.c_str(), OF_CREATE | OF_WRITE, nullptr);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to create AVI file:" << filePath;
+        return false;
+    }
+    
+    // Настройка видео потока
+    AVISTREAMINFO aviStreamInfo;
+    memset(&aviStreamInfo, 0, sizeof(AVISTREAMINFO));
+    aviStreamInfo.fccType = streamtypeVIDEO;
+    aviStreamInfo.fccHandler = mmioFOURCC('M', 'J', 'P', 'G'); // MJPEG кодек
+    aviStreamInfo.dwScale = 1;
+    aviStreamInfo.dwRate = 30; // 30 FPS
+    aviStreamInfo.dwSuggestedBufferSize = width * height * 3;
+    aviStreamInfo.rcFrame.left = 0;
+    aviStreamInfo.rcFrame.top = 0;
+    aviStreamInfo.rcFrame.right = width;
+    aviStreamInfo.rcFrame.bottom = height;
+    
+    PAVISTREAM pVideoStream = nullptr;
+    hr = AVIFileCreateStreamW(pAviFile, &pVideoStream, &aviStreamInfo);
+    if (FAILED(hr)) {
+        qDebug() << "Failed to create video stream";
+        AVIFileRelease(pAviFile);
+        return false;
+    }
+    
+    // Настройка формата видео (MJPEG)
+    BITMAPINFOHEADER bih;
+    memset(&bih, 0, sizeof(BITMAPINFOHEADER));
+    bih.biSize = sizeof(BITMAPINFOHEADER);
+    bih.biWidth = width;
+    bih.biHeight = height;
+    bih.biPlanes = 1;
+    bih.biBitCount = 24;
+    bih.biCompression = BI_RGB;
+    bih.biSizeImage = width * height * 3;
+    
+    hr = AVIStreamSetFormat(pVideoStream, 0, &bih, sizeof(bih));
+    if (FAILED(hr)) {
+        qDebug() << "Failed to set video format";
+        AVIStreamRelease(pVideoStream);
+        AVIFileRelease(pAviFile);
+        return false;
+    }
+    
+    // Записываем кадры
+    for (int i = 0; i < frames.count(); ++i) {
+        const QImage &frame = frames[i];
+        
+        // Конвертируем QImage в RGB24 формат
+        QImage rgbFrame = frame.convertToFormat(QImage::Format_RGB888);
+        
+        // Записываем кадр
+        LONG written;
+        hr = AVIStreamWrite(pVideoStream, i, 1, rgbFrame.bits(), 
+                          rgbFrame.byteCount(), AVIIF_KEYFRAME, nullptr, &written);
+        
+        if (FAILED(hr)) {
+            qDebug() << "Failed to write frame" << i;
+            break;
+        }
+    }
+    
+    // Освобождаем ресурсы
+    AVIStreamRelease(pVideoStream);
+    AVIFileRelease(pAviFile);
+    
+    qDebug() << "AVI file saved successfully:" << filePath << "with" << frames.count() << "frames";
+    return true;
 }
