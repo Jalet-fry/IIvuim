@@ -288,9 +288,12 @@ void CameraWorker::takePhoto()
         return;
     }
     
-    // Запускаем граф если не запущен
+    bool wasPreviewActive = m_isPreviewActive;
+    
+    // Запускаем граф и таймер если не запущены
     if (!m_isPreviewActive && m_pMediaControl) {
         m_pMediaControl->Run();
+        m_captureTimer->start(33); // Запускаем таймер для захвата кадров
         QThread::msleep(500); // Даём камере прогреться
     }
     
@@ -298,6 +301,13 @@ void CameraWorker::takePhoto()
     QImage frame = captureCurrentFrame();
     
     if (frame.isNull()) {
+        // Останавливаем если запускали
+        if (!wasPreviewActive) {
+            m_captureTimer->stop();
+            if (m_pMediaControl) {
+                m_pMediaControl->Stop();
+            }
+        }
         emit errorOccurred("Не удалось захватить кадр");
         return;
     }
@@ -315,9 +325,12 @@ void CameraWorker::takePhoto()
         emit errorOccurred("Не удалось сохранить фото");
     }
     
-    // Останавливаем граф если превью не активно
-    if (!m_isPreviewActive && m_pMediaControl) {
-        m_pMediaControl->Stop();
+    // Останавливаем граф и таймер если превью не было активно
+    if (!wasPreviewActive) {
+        m_captureTimer->stop();
+        if (m_pMediaControl) {
+            m_pMediaControl->Stop();
+        }
     }
 }
 
@@ -337,14 +350,22 @@ void CameraWorker::startVideoRecording()
     QString fileName = generateFileName("video", "avi");
     m_currentVideoPath = outputDir + "/" + fileName;
     
+    qDebug() << "Will save video to:" << m_currentVideoPath;
+    
     // Запускаем граф если не запущен
     if (m_pMediaControl) {
-        m_pMediaControl->Run();
+        HRESULT hr = m_pMediaControl->Run();
+        if (FAILED(hr)) {
+            qDebug() << "Failed to start media control, hr:" << hr;
+        } else {
+            qDebug() << "Media control started successfully";
+        }
     }
     
     // Запускаем таймер захвата кадров для видео
     m_isRecordingVideo = true;
     m_videoFrameTimer->start(33); // ~30 FPS
+    qDebug() << "Video frame timer started";
     
     emit videoRecordingStarted();
     qDebug() << "Video recording started";
@@ -353,34 +374,46 @@ void CameraWorker::startVideoRecording()
 void CameraWorker::stopVideoRecording()
 {
     if (!m_isRecordingVideo) {
+        qDebug() << "stopVideoRecording called but not recording";
         return;
     }
     
+    qDebug() << "Stopping video recording...";
     m_videoFrameTimer->stop();
     m_isRecordingVideo = false;
     
+    qDebug() << "Captured" << m_videoFrames.count() << "frames";
+    
     // Сохраняем видео в настоящий AVI файл
     if (!m_videoFrames.isEmpty()) {
+        qDebug() << "Saving video to AVI...";
         bool success = saveVideoToAVI(m_currentVideoPath, m_videoFrames, m_videoFrameWidth, m_videoFrameHeight);
         if (success) {
-            qDebug() << "Video recording saved as AVI:" << m_currentVideoPath << "-" << m_videoFrames.count() << "frames";
+            qDebug() << "✅ Video saved as AVI:" << m_currentVideoPath << "-" << m_videoFrames.count() << "frames";
+            emit videoRecordingStopped(); // Отправляем сигнал только если успешно
         } else {
-            qDebug() << "Failed to save video as AVI, falling back to frames";
+            qDebug() << "❌ Failed to save video as AVI, falling back to frames";
             // Fallback: сохраняем первый кадр
             QString firstFramePath = m_currentVideoPath;
             firstFramePath.replace(".avi", "_frame_000.jpg");
-            saveFrame(m_videoFrames.first(), firstFramePath);
+            if (saveFrame(m_videoFrames.first(), firstFramePath)) {
+                qDebug() << "Saved first frame as fallback:" << firstFramePath;
+            }
+            emit videoRecordingStopped();
         }
+    } else {
+        qDebug() << "❌ No frames captured!";
+        emit errorOccurred("Не удалось записать видео - нет кадров");
     }
     
     m_videoFrames.clear();
     
-    emit videoRecordingStopped();
     qDebug() << "Video recording stopped";
     
     // Останавливаем граф если превью не активно
     if (!m_isPreviewActive && m_pMediaControl) {
         m_pMediaControl->Stop();
+        qDebug() << "Media control stopped";
     }
 }
 
@@ -471,6 +504,10 @@ void CameraWorker::captureFrame()
             if (m_isRecordingVideo) {
                 m_videoFrames.append(frame);
                 m_videoFrameCount++;
+                
+                if (m_videoFrameCount % 30 == 0) {
+                    qDebug() << "Video: captured" << m_videoFrameCount << "frames";
+                }
                 
                 // Ограничиваем количество кадров (чтобы не забить память)
                 if (m_videoFrames.count() > 300) { // ~10 секунд при 30 FPS
@@ -747,3 +784,4 @@ bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &
     qDebug() << "AVI file saved successfully:" << filePath << "with" << frames.count() << "frames";
     return true;
 }
+

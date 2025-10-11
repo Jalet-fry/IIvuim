@@ -3,13 +3,16 @@
 #include <QMessageBox>
 #include <QGroupBox>
 #include <QSplitter>
+#include <QDebug>
+#include <windows.h>
 
 CameraWindow::CameraWindow(QWidget *parent)
     : QWidget(parent),
       cameraWorker(nullptr),
       isRecording(false),
       isPreviewEnabled(true),
-      recordingIndicatorVisible(false)
+      recordingIndicatorVisible(false),
+      globalHotkeysRegistered(false)
 {
     setWindowTitle("ЛР 4: Работа с веб-камерой (DirectShow API)");
     resize(1000, 700);
@@ -26,6 +29,14 @@ CameraWindow::CameraWindow(QWidget *parent)
     connect(cameraWorker, &CameraWorker::errorOccurred, this, &CameraWindow::onError);
     connect(cameraWorker, &CameraWorker::cameraInfoReady, this, &CameraWindow::onCameraInfoReady);
     connect(cameraWorker, &CameraWorker::frameReady, this, &CameraWindow::onFrameReady);
+    
+    // Настраиваем горячие клавиши
+    setupHotkeys();
+    
+    // Инициализируем состояния
+    isRecording = false;
+    isPreviewEnabled = false;
+    isVideoRecording = false;
     
     // Таймер для мигающего индикатора записи
     recordingBlinkTimer = new QTimer(this);
@@ -51,6 +62,9 @@ CameraWindow::CameraWindow(QWidget *parent)
 
 CameraWindow::~CameraWindow()
 {
+    // Отменяем регистрацию глобальных горячих клавиш
+    unregisterGlobalHotkeys();
+    
     if (cameraWorker) {
         cameraWorker->stopAll();
         delete cameraWorker;
@@ -174,8 +188,17 @@ void CameraWindow::setupUI()
         QMessageBox::information(this, "Скрытый режим",
             "Окно будет скрыто.\n"
             "Камера продолжит работать.\n\n"
-            "Для возврата закройте приложение через\n"
-            "диспетчер задач или используйте Alt+Tab.");
+            "🔥 ГЛОБАЛЬНЫЕ ГОРЯЧИЕ КЛАВИШИ:\n"
+            "• Ctrl+Shift+R - НАЧАТЬ запись видео\n"
+            "• Ctrl+Shift+S - ОСТАНОВИТЬ запись видео\n"
+            "• Ctrl+Shift+P - Сделать фото\n"
+            "• Ctrl+Shift+Q - Показать окно (+ автостоп записи)\n\n"
+            "Работают ВЕЗДЕ в Windows!\n\n"
+            "Для принудительного выхода используйте\n"
+            "диспетчер задач (Ctrl+Shift+Esc)");
+        
+        // Регистрируем глобальные горячие клавиши при скрытии
+        registerGlobalHotkeys();
         this->hide();
     });
     stealthLayout->addWidget(hideWindowBtn);
@@ -251,6 +274,7 @@ void CameraWindow::onTogglePreview()
 void CameraWindow::onVideoRecordingStarted()
 {
     isRecording = true;
+    isVideoRecording = true;
     updateVideoButtonText();
     recordingBlinkTimer->start(500);
     statusLabel->setText("Статус: ⏺ ЗАПИСЬ ВИДЕО");
@@ -259,6 +283,7 @@ void CameraWindow::onVideoRecordingStarted()
 void CameraWindow::onVideoRecordingStopped()
 {
     isRecording = false;
+    isVideoRecording = false;
     updateVideoButtonText();
     recordingBlinkTimer->stop();
     recordingIndicator->clear();
@@ -312,4 +337,130 @@ void CameraWindow::updateVideoButtonText()
             "QPushButton:pressed { background-color: #D84315; }"
         );
     }
+}
+
+void CameraWindow::setupHotkeys()
+{
+    // Эта функция больше не используется
+    // Глобальные горячие клавиши регистрируются в registerGlobalHotkeys()
+}
+
+void CameraWindow::registerGlobalHotkeys()
+{
+    if (globalHotkeysRegistered) {
+        return; // Уже зарегистрированы
+    }
+    
+    HWND hwnd = (HWND)winId();
+    
+    // Регистрируем глобальные горячие клавиши Windows
+    // MOD_CONTROL | MOD_SHIFT = Ctrl+Shift
+    
+    // Ctrl+Shift+R - начать запись
+    if (RegisterHotKey(hwnd, HOTKEY_START_RECORDING, MOD_CONTROL | MOD_SHIFT, 'R')) {
+        qDebug() << "✅ Зарегистрирована горячая клавиша: Ctrl+Shift+R (начать запись)";
+    } else {
+        qDebug() << "❌ Не удалось зарегистрировать Ctrl+Shift+R";
+    }
+    
+    // Ctrl+Shift+S - остановить запись
+    if (RegisterHotKey(hwnd, HOTKEY_STOP_RECORDING, MOD_CONTROL | MOD_SHIFT, 'S')) {
+        qDebug() << "✅ Зарегистрирована горячая клавиша: Ctrl+Shift+S (остановить)";
+    } else {
+        qDebug() << "❌ Не удалось зарегистрировать Ctrl+Shift+S";
+    }
+    
+    // Ctrl+Shift+P - сделать фото
+    if (RegisterHotKey(hwnd, HOTKEY_TAKE_PHOTO, MOD_CONTROL | MOD_SHIFT, 'P')) {
+        qDebug() << "✅ Зарегистрирована горячая клавиша: Ctrl+Shift+P (фото)";
+    } else {
+        qDebug() << "❌ Не удалось зарегистрировать Ctrl+Shift+P";
+    }
+    
+    // Ctrl+Shift+Q - показать окно
+    if (RegisterHotKey(hwnd, HOTKEY_SHOW_WINDOW, MOD_CONTROL | MOD_SHIFT, 'Q')) {
+        qDebug() << "✅ Зарегистрирована горячая клавиша: Ctrl+Shift+Q (показать окно)";
+    } else {
+        qDebug() << "❌ Не удалось зарегистрировать Ctrl+Shift+Q";
+    }
+    
+    globalHotkeysRegistered = true;
+}
+
+void CameraWindow::unregisterGlobalHotkeys()
+{
+    if (!globalHotkeysRegistered) {
+        return;
+    }
+    
+    HWND hwnd = (HWND)winId();
+    
+    UnregisterHotKey(hwnd, HOTKEY_START_RECORDING);
+    UnregisterHotKey(hwnd, HOTKEY_STOP_RECORDING);
+    UnregisterHotKey(hwnd, HOTKEY_TAKE_PHOTO);
+    UnregisterHotKey(hwnd, HOTKEY_SHOW_WINDOW);
+    
+    qDebug() << "Глобальные горячие клавиши отменены";
+    
+    globalHotkeysRegistered = false;
+}
+
+bool CameraWindow::nativeEvent(const QByteArray &eventType, void *message, long *result)
+{
+    if (eventType == "windows_generic_MSG") {
+        MSG *msg = static_cast<MSG*>(message);
+        
+        if (msg->message == WM_HOTKEY) {
+            int hotkeyId = msg->wParam;
+            
+            qDebug() << "Получена горячая клавиша:" << hotkeyId;
+            
+            switch (hotkeyId) {
+                case HOTKEY_START_RECORDING:
+                    qDebug() << "Ctrl+Shift+R - НАЧАТЬ запись видео";
+                    if (!isRecording && !isVideoRecording) {
+                        statusLabel->setText("Статус: Запись видео (горячая клавиша)...");
+                        cameraWorker->startVideoRecording();
+                    } else {
+                        qDebug() << "Запись уже идет!";
+                    }
+                    return true;
+                
+                case HOTKEY_STOP_RECORDING:
+                    qDebug() << "Ctrl+Shift+S - ОСТАНОВИТЬ запись";
+                    qDebug() << "isRecording:" << isRecording << "isVideoRecording:" << isVideoRecording;
+                    // Напрямую останавливаем запись
+                    if (isRecording || isVideoRecording) {
+                        statusLabel->setText("Статус: Остановка записи (горячая клавиша)...");
+                        cameraWorker->stopVideoRecording();
+                    } else {
+                        qDebug() << "Запись не идет!";
+                    }
+                    return true;
+                    
+                case HOTKEY_TAKE_PHOTO:
+                    qDebug() << "Ctrl+Shift+P - сделать фото";
+                    statusLabel->setText("Статус: Захват фото (горячая клавиша)...");
+                    onTakePhoto();
+                    return true;
+                    
+                case HOTKEY_SHOW_WINDOW:
+                    qDebug() << "Ctrl+Shift+Q - показать окно";
+                    
+                    // Автоматически останавливаем запись при показе окна
+                    if (isRecording || isVideoRecording) {
+                        qDebug() << "Автоматически останавливаем запись при показе окна";
+                        cameraWorker->stopVideoRecording();
+                    }
+                    
+                    unregisterGlobalHotkeys(); // Отменяем глобальные клавиши
+                    this->show();
+                    this->raise();
+                    this->activateWindow();
+                    return true;
+            }
+        }
+    }
+    
+    return QWidget::nativeEvent(eventType, message, result);
 }

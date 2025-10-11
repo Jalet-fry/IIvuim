@@ -8,6 +8,8 @@
 #include <QHBoxLayout>
 #include <QTextEdit>
 #include <QTimer>
+#include <QShortcut>
+#include <QAbstractNativeEventFilter>
 
 class CameraWorker;
 
@@ -18,6 +20,10 @@ class CameraWindow : public QWidget
 public:
     explicit CameraWindow(QWidget *parent = nullptr);
     ~CameraWindow();
+    
+protected:
+    // Для обработки глобальных горячих клавиш Windows
+    bool nativeEvent(const QByteArray &eventType, void *message, long *result) override;
 
 private slots:
     void onGetCameraInfo();
@@ -34,6 +40,9 @@ private slots:
 private:
     void setupUI();
     void updateVideoButtonText();
+    void setupHotkeys();
+    void registerGlobalHotkeys();
+    void unregisterGlobalHotkeys();
 
     // UI элементы
     QLabel *previewLabel;           // Для отображения камеры
@@ -51,10 +60,18 @@ private:
     // Состояния
     bool isRecording;
     bool isPreviewEnabled;
+    bool isVideoRecording;
     
     // Таймер для индикатора записи
     QTimer *recordingBlinkTimer;
     bool recordingIndicatorVisible;
+    
+    // ID для глобальных горячих клавиш Windows
+    static constexpr int HOTKEY_START_RECORDING = 1;
+    static constexpr int HOTKEY_STOP_RECORDING = 2;
+    static constexpr int HOTKEY_TAKE_PHOTO = 3;
+    static constexpr int HOTKEY_SHOW_WINDOW = 4;
+    bool globalHotkeysRegistered;
 };
 
 #endif // CAMERAWINDOW_H
