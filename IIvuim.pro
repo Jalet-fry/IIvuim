@@ -23,6 +23,9 @@ SOURCES += \
     Lab4/camerawindow.cpp \
     Lab4/cameraworker.cpp \
     Lab4/jakecamerawarning.cpp \
+    Lab5/usbdevice.cpp \
+    Lab5/usbmonitor.cpp \
+    Lab5/usbwindow.cpp \
     Animation/jakewidget.cpp
 
 HEADERS += \
@@ -34,10 +37,14 @@ HEADERS += \
     Lab4/camerawindow.h \
     Lab4/cameraworker.h \
     Lab4/jakecamerawarning.h \
+    Lab5/usbdevice.h \
+    Lab5/usbmonitor.h \
+    Lab5/usbwindow.h \
     Animation/jakewidget.h
 
 FORMS += \
-    mainwindow.ui
+    mainwindow.ui \
+    Lab5/usbwindow.ui
 
 RESOURCES += \
     resources.qrc
@@ -46,4 +53,7 @@ RESOURCES += \
 # Низкоуровневый доступ к камере без высокоуровневых библиотек
 # Qt Multimedia НЕ используется!
 
-win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid -lstrmiids -lvfw32
+# Lab5 использует Windows API для мониторинга USB-устройств
+# Библиотеки: setupapi.lib, Cfgmgr32.lib
+
+win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid -lstrmiids -lvfw32 -lCfgmgr32
