@@ -22,6 +22,7 @@ SOURCES += \
     Lab3/storagewindow.cpp \
     Lab4/camerawindow.cpp \
     Lab4/cameraworker.cpp \
+    Lab4/jakecamerawarning.cpp \
     Animation/jakewidget.cpp
 
 HEADERS += \
@@ -32,6 +33,7 @@ HEADERS += \
     Lab3/storagewindow.h \
     Lab4/camerawindow.h \
     Lab4/cameraworker.h \
+    Lab4/jakecamerawarning.h \
     Animation/jakewidget.h
 
 FORMS += \
