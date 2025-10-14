@@ -29,6 +29,9 @@ public:
     // Геттеры
     QString getName() const { return name; }
     QString getPID() const { return pid; }
+    QString getVID() const { return vid; }
+    QString getManufacturer() const { return manufacturer; }
+    QString getDeviceType() const { return deviceType; }
     QString getHardwareID() const { return hardwareID; }
     QString getDevicePath() const { return devicePath; }
     bool isEjectable() const { return ejectable; }
@@ -46,9 +49,15 @@ private:
     QString name;            // Имя устройства
     QString devicePath;      // Путь к устройству
     QString pid;             // Product ID
+    QString vid;             // Vendor ID
+    QString manufacturer;    // Производитель
+    QString deviceType;      // Тип устройства (HID, Mass Storage и т.д.)
     bool ejectable;          // Можно ли извлечь
     DEVINST devInst;         // Идентификатор устройства
     bool safelyEjected;      // Было ли безопасно извлечено
+    
+    // Вспомогательный метод для определения типа устройства
+    QString determineDeviceType(HDEVINFO deviceList, SP_DEVINFO_DATA& deviceInfo);
 };
 
 #endif // USBDEVICE_H

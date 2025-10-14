@@ -77,8 +77,14 @@ void USBMonitor::run()
     
     if (!RegisterClassExW(&wx))
     {
-        emit logMessage("Ошибка регистрации класса окна");
-        return;
+        // Проверяем, не является ли ошибка "класс уже существует"
+        DWORD error = GetLastError();
+        if (error != ERROR_CLASS_ALREADY_EXISTS)
+        {
+            emit logMessage(QString("Ошибка регистрации класса окна: %1").arg(error));
+            return;
+        }
+        // Класс уже зарегистрирован - это нормально, продолжаем
     }
     
     // Создание скрытого окна для получения уведомлений
@@ -176,9 +182,31 @@ void USBMonitor::loadInitialDevices(HWND hWnd)
         if (!device.getName().isEmpty())
         {
             USBDevice::devices.append(device);
-            emit logMessage(QString("Обнаружено устройство: %1 [PID: %2]")
-                          .arg(device.getName())
-                          .arg(device.getPID()));
+            
+            // Формируем детальное сообщение
+            QString deviceInfo = QString("Обнаружено устройство: %1").arg(device.getName());
+            
+            if (!device.getDeviceType().isEmpty())
+            {
+                deviceInfo += QString(" [Тип: %1]").arg(device.getDeviceType());
+            }
+            
+            if (!device.getVID().isEmpty() && !device.getPID().isEmpty())
+            {
+                deviceInfo += QString(" [VID: %1, PID: %2]").arg(device.getVID()).arg(device.getPID());
+            }
+            else if (!device.getPID().isEmpty())
+            {
+                deviceInfo += QString(" [PID: %1]").arg(device.getPID());
+            }
+            
+            if (!device.getManufacturer().isEmpty() && 
+                !device.getManufacturer().contains("(Стандартные", Qt::CaseInsensitive))
+            {
+                deviceInfo += QString(" [Производитель: %1]").arg(device.getManufacturer());
+            }
+            
+            emit logMessage(deviceInfo);
         }
         
         deviceIndex++;
@@ -250,10 +278,24 @@ void USBMonitor::handleDeviceArrival(PDEV_BROADCAST_DEVICEINTERFACE info, HWND h
             {
                 USBDevice::devices.append(device);
                 
-                emit logMessage(QString("→ Подключено: %1 [PID: %2]")
-                              .arg(device.getName())
-                              .arg(device.getPID()));
-                              
+                // Формируем детальное сообщение о подключении
+                QString deviceInfo = QString("→ Подключено: %1").arg(device.getName());
+                
+                if (!device.getDeviceType().isEmpty())
+                {
+                    deviceInfo += QString(" [Тип: %1]").arg(device.getDeviceType());
+                }
+                
+                if (!device.getVID().isEmpty() && !device.getPID().isEmpty())
+                {
+                    deviceInfo += QString(" [VID: %1, PID: %2]").arg(device.getVID()).arg(device.getPID());
+                }
+                else if (!device.getPID().isEmpty())
+                {
+                    deviceInfo += QString(" [PID: %1]").arg(device.getPID());
+                }
+                
+                emit logMessage(deviceInfo);
                 emit deviceConnected(device.getName(), device.getPID());
             }
         }
@@ -278,19 +320,34 @@ void USBMonitor::handleDeviceRemoveComplete(PDEV_BROADCAST_DEVICEINTERFACE info)
                 USBDevice removedDevice = USBDevice::devices[i];
                 USBDevice::devices.removeAt(i);
                 
+                // Формируем детальное сообщение об отключении
+                QString deviceInfo;
                 if (removedDevice.isSafelyEjected())
                 {
-                    emit logMessage(QString("← Безопасно отключено: %1 [PID: %2]")
-                                  .arg(removedDevice.getName())
-                                  .arg(removedDevice.getPID()));
+                    deviceInfo = QString("← Безопасно отключено: %1").arg(removedDevice.getName());
                 }
                 else
                 {
-                    emit logMessage(QString("⚠ Небезопасно отключено: %1 [PID: %2]")
-                                  .arg(removedDevice.getName())
-                                  .arg(removedDevice.getPID()));
+                    deviceInfo = QString("⚠ Небезопасно отключено: %1").arg(removedDevice.getName());
                 }
                 
+                if (!removedDevice.getDeviceType().isEmpty())
+                {
+                    deviceInfo += QString(" [Тип: %1]").arg(removedDevice.getDeviceType());
+                }
+                
+                if (!removedDevice.getVID().isEmpty() && !removedDevice.getPID().isEmpty())
+                {
+                    deviceInfo += QString(" [VID: %1, PID: %2]")
+                                   .arg(removedDevice.getVID())
+                                   .arg(removedDevice.getPID());
+                }
+                else if (!removedDevice.getPID().isEmpty())
+                {
+                    deviceInfo += QString(" [PID: %1]").arg(removedDevice.getPID());
+                }
+                
+                emit logMessage(deviceInfo);
                 emit deviceDisconnected(removedDevice.getName(), removedDevice.getPID());
                 break;
             }
