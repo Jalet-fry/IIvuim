@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT += core gui widgets
+QT += core gui widgets multimedia
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -26,6 +26,13 @@ SOURCES += \
     Lab5/usbdevice.cpp \
     Lab5/usbmonitor.cpp \
     Lab5/usbwindow.cpp \
+    Lab6/windowsbluetoothmanager.cpp \
+    Lab6/bluetoothwindow.cpp \
+    Lab6/bluetoothlogger.cpp \
+    Lab6/bluetoothfilesender.cpp \
+    Lab6/bluetoothconnection.cpp \
+    Lab6/bluetoothreceiver.cpp \
+    Lab6/obexfilesender.cpp \
     Animation/jakewidget.cpp
 
 HEADERS += \
@@ -40,11 +47,19 @@ HEADERS += \
     Lab5/usbdevice.h \
     Lab5/usbmonitor.h \
     Lab5/usbwindow.h \
+    Lab6/windowsbluetoothmanager.h \
+    Lab6/bluetoothwindow.h \
+    Lab6/bluetoothlogger.h \
+    Lab6/bluetoothfilesender.h \
+    Lab6/bluetoothconnection.h \
+    Lab6/bluetoothreceiver.h \
+    Lab6/obexfilesender.h \
     Animation/jakewidget.h
 
 FORMS += \
     mainwindow.ui \
-    Lab5/usbwindow.ui
+    Lab5/usbwindow.ui \
+    Lab6/bluetoothwindow.ui
 
 RESOURCES += \
     resources.qrc
@@ -56,4 +71,7 @@ RESOURCES += \
 # Lab5 использует Windows API для мониторинга USB-устройств
 # Библиотеки: setupapi.lib, Cfgmgr32.lib
 
-win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid -lstrmiids -lvfw32 -lCfgmgr32
+# Lab6 использует Windows Bluetooth API (Native Windows API)
+# Библиотеки: Bthprops.lib, ws2_32.lib
+
+win32: LIBS += -luser32 -lpowrprof -ladvapi32 -lsetupapi -lole32 -loleaut32 -lwbemuuid -lstrmiids -lvfw32 -lCfgmgr32 -lBthprops -lws2_32
