@@ -1,15 +1,32 @@
 <RCC>
     <qresource prefix="/">
-        <file>Animation/Jake.gif</file>
-        <file>Animation/Jake dance.gif</file>
-        <file>Animation/Jake laugh.gif</file>
-        <file>Animation/Jake scate.gif</file>
-        <file>Animation/Jake vig eyes.gif</file>
-        <file>Animation/jake with cicrle.gif</file>
+        <!-- Оригинальные легкие анимации Jake -->
         <file>Animation/Jake_picture.jpg</file>
     </qresource>
     <qresource prefix="/assets">
         <file>Animation/assets/jake_base.gif</file>
     </qresource>
+    <qresource prefix="/backgrounds">
+        <file>backgrounds/adventure-time-background-qkzcxleck2std5bk.jpg</file>
+        <file>backgrounds/Elliot_and_Andgela.jpg</file>
+        <file>backgrounds/lunix-fuflo-1.jpg</file>
+        <file>backgrounds/photo_2024-05-30_07-16-27.jpg</file>
+        <file>backgrounds/photo_2024-06-03_12-10-35.jpg</file>
+        <file>backgrounds/Space_astronavt.jpg</file>
+    </qresource>
 </RCC>
+
+<!-- 
+ПРИМЕЧАНИЕ: Большие GIF анимации (001-020.gif и другие Jake анимации) 
+НЕ включены в ресурсы из-за ограничений памяти компилятора.
+Они загружаются напрямую с диска используя относительные пути.
+
+Список доступных анимаций в папке Animation/:
+- Jake.gif, Jake dance.gif, Jake laugh.gif, Jake scate.gif
+- Jake vig eyes.gif, jake with cicrle.gif
+- 001.gif - 020.gif (пронумерованные анимации)
+
+Для использования используйте прямой путь, например:
+QMovie *movie = new QMovie("Animation/004.gif");
+-->
 

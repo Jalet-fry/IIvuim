@@ -124,28 +124,28 @@ void JakeCameraWarning::showWarning(WarningType type)
     
     switch (type) {
         case CAMERA_STARTED:
-            gifPath = ":/Animation/Jake vig eyes.gif";
+            gifPath = "Animation/Jake vig eyes.gif";
             message = "👁️ Эй! Камера включилась!";
             hideDelay = 3000;
             setStyleSheet("QWidget { background-color: rgba(255, 255, 255, 240); border: 3px solid #2196F3; border-radius: 10px; }");
             break;
             
         case RECORDING_STARTED:
-            gifPath = ":/Animation/Jake dance.gif";
+            gifPath = "Animation/Jake dance.gif";
             message = "⏺️ ЗАПИСЬ ИДЕТ!";
             isPersistent = true; // Не скрывать автоматически
             setStyleSheet("QWidget { background-color: rgba(255, 220, 220, 240); border: 3px solid #FF0000; border-radius: 10px; }");
             break;
             
         case STEALTH_MODE:
-            gifPath = ":/Animation/Jake laugh.gif";
+            gifPath = "Animation/Jake laugh.gif";
             message = "🕵️ Скрытая камера активна!";
             hideDelay = 5000;
             setStyleSheet("QWidget { background-color: rgba(255, 200, 200, 240); border: 3px solid #9C27B0; border-radius: 10px; }");
             break;
             
         case PHOTO_TAKEN:
-            gifPath = ":/Animation/jake with cicrle.gif";
+            gifPath = "Animation/jake with cicrle.gif";
             message = "📸 КЛИК! Фото!";
             hideDelay = 2000;
             setStyleSheet("QWidget { background-color: rgba(220, 255, 220, 240); border: 3px solid #4CAF50; border-radius: 10px; }");

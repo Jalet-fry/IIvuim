@@ -1,7 +1,18 @@
-*.txt
-*.md
+# Временные и архивные файлы (НЕ игнорируем документацию!)
 *.rar
 *.iso
+*.bak
+*.tmp
+*.temp
+
+# Автогенерируемые файлы сборки Qt
+object_script.*
+Makefile
+Makefile.*
+ui_*.h
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
 # Qt generated files
 *.pro.user
 *.pro.user.*

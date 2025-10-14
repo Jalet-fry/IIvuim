@@ -4,6 +4,7 @@
 #include <QString>
 #include <QStringList>
 #include <vector>
+#include <cstdint>
 #include <windows.h>
 #include <comdef.h>
 #include <Wbemidl.h>

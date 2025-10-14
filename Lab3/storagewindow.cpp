@@ -13,7 +13,7 @@ StorageWindow::StorageWindow(QWidget *parent) : QWidget(parent), m_scanner(new S
     setupUI();
     
     // Инициализация анимации Jake
-    m_jakeMovie = new QMovie(":/Animation/Jake dance.gif");
+    m_jakeMovie = new QMovie("Animation/Jake dance.gif");
     m_jakeMovie->setScaledSize(QSize(100, 100)); // Размер анимации
     m_jakeLabel->setMovie(m_jakeMovie);
     m_jakeMovie->start();

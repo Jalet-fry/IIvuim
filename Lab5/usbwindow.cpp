@@ -3,11 +3,16 @@
 #include <QDateTime>
 #include <QMessageBox>
 #include <QHeaderView>
+#include <QResizeEvent>
+#include <QFileInfo>
 
 USBWindow::USBWindow(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::USBWindow)
     , monitor(nullptr)
+    , jakeAnimationLabel(nullptr)
+    , jakeMovie(nullptr)
+    , animationTimer(nullptr)
 {
     ui->setupUi(this);
     
@@ -63,6 +68,7 @@ USBWindow::USBWindow(QWidget *parent)
     // Создание и запуск монитора
     monitor = new USBMonitor(this);
     setupConnections();
+    setupJakeAnimation();
     monitor->start();
     
     addLogMessage("=== Система мониторинга USB-устройств запущена ===");
@@ -71,6 +77,7 @@ USBWindow::USBWindow(QWidget *parent)
     addLogMessage("2. Событие отобразится в журнале");
     addLogMessage("3. Выберите устройство и нажмите 'Безопасно извлечь'");
     addLogMessage("4. Отключите устройство физически");
+    addLogMessage("🎭 Jake будет реагировать на события!");
     addLogMessage("");
 }
 
@@ -81,6 +88,23 @@ USBWindow::~USBWindow()
         monitor->stop();
         monitor->wait();
     }
+    
+    // Очистка анимационных ресурсов
+    if (animationTimer)
+    {
+        animationTimer->stop();
+        delete animationTimer;
+    }
+    if (jakeMovie)
+    {
+        jakeMovie->stop();
+        delete jakeMovie;
+    }
+    if (jakeAnimationLabel)
+    {
+        delete jakeAnimationLabel;
+    }
+    
     delete ui;
 }
 
@@ -243,12 +267,18 @@ void USBWindow::onDeviceConnected(const QString& deviceName, const QString& pid)
 {
     addLogMessage(QString("✓ ПОДКЛЮЧЕНО: %1 [PID: %2]").arg(deviceName).arg(pid));
     updateDevicesTable();
+    
+    // Показываем анимацию приветствия Jake при подключении устройства
+    showJakeAnimation("Animation/005.gif", 3000);
 }
 
 void USBWindow::onDeviceDisconnected(const QString& deviceName, const QString& pid)
 {
     addLogMessage(QString("✗ ОТКЛЮЧЕНО: %1 [PID: %2]").arg(deviceName).arg(pid));
     updateDevicesTable();
+    
+    // Показываем анимацию прощания при отключении
+    showJakeAnimation("Animation/004.gif", 4000);
 }
 
 void USBWindow::onDeviceEjected(const QString& deviceName, bool success)
@@ -256,6 +286,8 @@ void USBWindow::onDeviceEjected(const QString& deviceName, bool success)
     if (success)
     {
         addLogMessage(QString("✓ БЕЗОПАСНО ИЗВЛЕЧЕНО: %1").arg(deviceName));
+        // Показываем анимацию прощания Jake при успешном извлечении
+        showJakeAnimation("Animation/004.gif", 4000);
     }
     else
     {
@@ -275,5 +307,104 @@ void USBWindow::onEjectFailed(const QString& deviceName)
 void USBWindow::onLogMessage(const QString& message)
 {
     addLogMessage(message);
+}
+
+void USBWindow::setupJakeAnimation()
+{
+    // Создаем анимационный лейбл для Jake (УВЕЛИЧЕННЫЙ РАЗМЕР!)
+    jakeAnimationLabel = new QLabel(this);
+    jakeAnimationLabel->setFixedSize(400, 320); // Увеличили в 2 раза!
+    jakeAnimationLabel->setAlignment(Qt::AlignCenter);
+    jakeAnimationLabel->setStyleSheet(R"(
+        QLabel {
+            background: transparent;
+            border: none;
+        }
+    )");
+    
+    // Размещаем Jake в правом нижнем углу (с учетом нового размера)
+    jakeAnimationLabel->move(this->width() - 420, this->height() - 340);
+    jakeAnimationLabel->hide(); // Изначально скрыт
+    
+    // Таймер для автоскрытия анимации
+    animationTimer = new QTimer(this);
+    animationTimer->setSingleShot(true);
+    connect(animationTimer, &QTimer::timeout, this, &USBWindow::onAnimationHide);
+}
+
+void USBWindow::showJakeAnimation(const QString& gifPath, int duration)
+{
+    if (!jakeAnimationLabel) return;
+    
+    addLogMessage(QString("🎬 Загружаю анимацию: %1").arg(gifPath));
+    
+    // Обновляем позицию на случай изменения размера окна
+    jakeAnimationLabel->move(this->width() - 420, this->height() - 340);
+    
+    // Останавливаем предыдущую анимацию если есть
+    if (jakeMovie)
+    {
+        jakeMovie->stop();
+        delete jakeMovie;
+        jakeMovie = nullptr;
+    }
+    
+    // Создаем и запускаем новую анимацию
+    jakeMovie = new QMovie(gifPath);
+    if (jakeMovie->isValid())
+    {
+        // Устанавливаем масштабированный размер для лучшего отображения
+        jakeMovie->setScaledSize(QSize(400, 320));
+        
+        jakeAnimationLabel->setMovie(jakeMovie);
+        jakeAnimationLabel->show();
+        jakeAnimationLabel->raise(); // Показываем поверх других элементов
+        jakeMovie->start();
+        
+        addLogMessage(QString("✅ Анимация запущена! Кадров: %1").arg(jakeMovie->frameCount()));
+        
+        // Запускаем таймер автоскрытия
+        animationTimer->start(duration);
+    }
+    else
+    {
+        // Если файл не найден
+        addLogMessage(QString("❌ Анимация не найдена: %1").arg(gifPath));
+        addLogMessage(QString("   Проверьте путь: %1").arg(QFileInfo(gifPath).absoluteFilePath()));
+        delete jakeMovie;
+        jakeMovie = nullptr;
+    }
+}
+
+void USBWindow::hideJakeAnimation()
+{
+    if (!jakeAnimationLabel) return;
+    
+    // Останавливаем и скрываем анимацию
+    if (jakeMovie)
+    {
+        jakeMovie->stop();
+        delete jakeMovie;
+        jakeMovie = nullptr;
+    }
+    
+    jakeAnimationLabel->hide();
+    animationTimer->stop();
+}
+
+void USBWindow::onAnimationHide()
+{
+    hideJakeAnimation();
+}
+
+void USBWindow::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    
+    // Обновляем позицию Jake при изменении размера окна
+    if (jakeAnimationLabel && jakeAnimationLabel->isVisible())
+    {
+        jakeAnimationLabel->move(this->width() - 420, this->height() - 340);
+    }
 }
 
