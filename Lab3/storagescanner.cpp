@@ -211,10 +211,14 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
             else if (modelLower.contains("wd_") || modelLower.contains("wd ") || 
                      modelLower.contains("western digital")) 
                 device.manufacturer = "Western Digital";
-            else if (modelLower.contains("seagate") || modelLower.contains("st")) 
-                device.manufacturer = "Seagate";
+            else if (modelLower.contains("transcend")) 
+                device.manufacturer = "Transcend";
             else if (modelLower.contains("kingston")) 
                 device.manufacturer = "Kingston";
+            else if (modelLower.contains("seagate") || 
+                     (modelLower.contains("st") && !modelLower.contains("kingston") && 
+                      !modelLower.contains("transcend") && !modelLower.contains("western"))) 
+                device.manufacturer = "Seagate";
             else if (modelLower.contains("crucial")) 
                 device.manufacturer = "Crucial";
             else if (modelLower.contains("intel")) 
