@@ -376,20 +376,13 @@ void BluetoothWindow::updateButtonStates()
     // Кнопка "Отправить файл" доступна если:
     // 1. Устройство выбрано
     // 2. Устройство может принимать файлы  
-    // 3. Либо есть RFCOMM подключение (для ноутбуков), либо устройство поддерживает OBEX (для телефонов)
+    // 3. Устройство поддерживает OBEX (телефоны И компьютеры)
     if (deviceSelected && canSendFiles) {
         const BluetoothDeviceData &device = discoveredDevices[selectedDeviceIndex];
         BluetoothDeviceCapabilities caps = device.getCapabilities();
         
-        // Для устройств с RFCOMM (ноутбуки) - нужно подключение
-        // Для устройств с OBEX (телефоны) - можно без подключения
-        if (caps.supportsRFCOMM) {
-            ui->sendFileButton->setEnabled(isDeviceConnected);
-        } else if (caps.supportsOBEX) {
-            ui->sendFileButton->setEnabled(true);  // OBEX работает через fsquirt без подключения
-        } else {
-            ui->sendFileButton->setEnabled(false);
-        }
+        // OBEX работает для всех устройств без предварительного подключения
+        ui->sendFileButton->setEnabled(caps.supportsOBEX);
     } else {
         ui->sendFileButton->setEnabled(false);
     }
@@ -560,39 +553,14 @@ void BluetoothWindow::onSendFileButtonClicked()
     logger->info("Send", "");
     
     // Определяем метод отправки
-    bool useRFCOMM = false;
     bool useOBEX = false;
     
-    if (caps.supportsRFCOMM && isDeviceConnected) {
-        // Есть RFCOMM подключение - используем прямую отправку (для ноутбуков)
-        useRFCOMM = true;
-        logger->success("Send", "✓ RFCOMM ПОДКЛЮЧЕНИЕ АКТИВНО!");
-        logger->info("Send", "Будет использована ПРЯМАЯ отправка через сокет");
-    } else if (caps.supportsOBEX) {
-        // Устройство поддерживает OBEX - используем ПРЯМОЙ OBEX протокол (для телефонов)
+    if (caps.supportsOBEX) {
+        // Все устройства с OBEX - телефоны И компьютеры
         useOBEX = true;
         logger->success("Send", "✓ Устройство поддерживает OBEX");
         logger->info("Send", "Будет использована ПРЯМАЯ отправка через OBEX протокол");
         logger->info("Send", "БЕЗ fsquirt - напрямую через сокет!");
-    } else if (caps.supportsRFCOMM && !isDeviceConnected) {
-        // Ноутбук но не подключено
-        logger->error("Send", "");
-        logger->error("Send", "✗ НЕТ RFCOMM ПОДКЛЮЧЕНИЯ!");
-        logger->error("Send", "");
-        logger->warning("Send", "Это устройство требует RFCOMM подключения:");
-        logger->info("Send", "1. Нажмите кнопку 'Подключить'");
-        logger->info("Send", "2. Дождитесь подключения (5-30 сек)");
-        logger->info("Send", "3. Повторите отправку");
-        logger->info("Send", "");
-        
-        QMessageBox::critical(this, "Нет подключения",
-            QString("Устройство %1 требует RFCOMM подключения!\n\n"
-                    "Что делать:\n"
-                    "1. Нажмите кнопку 'Подключить'\n"
-                    "2. Дождитесь подключения\n"
-                    "3. Повторите отправку")
-            .arg(device.name));
-        return;
     } else {
         logger->error("Send", "");
         logger->error("Send", "✗ ОТПРАВКА НЕ ВОЗМОЖНА!");
@@ -615,65 +583,17 @@ void BluetoothWindow::onSendFileButtonClicked()
     
     bool success = false;
     
-    if (useRFCOMM) {
-        // ПРЯМАЯ ОТПРАВКА через RFCOMM (ноутбук → ноутбук)
-        logger->info("Send", "Метод: ПРЯМАЯ ОТПРАВКА через RFCOMM сокет");
-        logger->info("Send", "");
-        
-        ui->progressBar->setVisible(true);
-        ui->progressBar->setValue(0);
-        
-        success = fileSender->sendFile(fileName, device.address, device.name, btConnection);
-        
-        if (success) {
-            logger->success("Send", "");
-            logger->success("Send", "✓✓✓ ФАЙЛ УСПЕШНО ОТПРАВЛЕН! ✓✓✓");
-            logger->info("Send", QString("Файл: %1 (%2 MB)")
-                .arg(fileInfo.fileName())
-                .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2));
-            logger->info("Send", "Метод: RFCOMM (прямое подключение)");
-            logger->info("Send", "");
-            
-            QMessageBox::information(this, "Успешно!",
-                QString("✓ Файл успешно отправлен!\n\n"
-                        "Файл: %1 (%2 MB)\n"
-                        "Устройство: %2\n\n"
-                        "Метод: Прямая отправка через\n"
-                        "RFCOMM сокет (ноутбук → ноутбук)")
-                .arg(fileInfo.fileName())
-                .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
-                .arg(device.name));
-                
-            QTimer::singleShot(2000, [this]() {
-                ui->progressBar->setVisible(false);
-            });
-        } else {
-            ui->progressBar->setVisible(false);
-            
-            logger->error("Send", "");
-            logger->error("Send", "✗✗✗ ОШИБКА ОТПРАВКИ ✗✗✗");
-            logger->error("Send", "Смотрите send.log для деталей");
-            logger->error("Send", "");
-            
-            QMessageBox::critical(this, "Ошибка отправки",
-                QString("Не удалось отправить файл через RFCOMM.\n\n"
-                        "Проверьте:\n"
-                        "• Подключение не разорвалось\n"
-                        "• На другом ноутбуке запущен Lab6\n"
-                        "• Достаточно памяти\n\n"
-                        "Детали в send.log"));
-        }
-        
-    } else if (useOBEX) {
-        // ПРЯМАЯ ОТПРАВКА через OBEX протокол для телефонов (БЕЗ fsquirt!)
-        logger->info("Send", "Метод: OBEX протокол (прямая отправка на Android)");
+    if (useOBEX) {
+        // ПРЯМАЯ ОТПРАВКА через OBEX протокол (для телефонов И компьютеров)
+        QString deviceType = device.getDeviceTypeString();
+        logger->info("Send", QString("Метод: OBEX протокол (прямая отправка на %1)").arg(deviceType));
         logger->info("Send", "БЕЗ FSQUIRT - только OBEX через сокет!");
         logger->info("Send", "");
         
         ui->progressBar->setVisible(true);
         ui->progressBar->setValue(0);
         
-        // Используем OBEX напрямую для телефонов
+        // Используем OBEX напрямую для телефонов И компьютеров
         success = obexSender->sendFileViaObex(fileName, device.address, device.name);
         
         if (success) {
@@ -682,20 +602,36 @@ void BluetoothWindow::onSendFileButtonClicked()
             logger->info("Send", QString("Файл: %1 (%2 MB)")
                 .arg(fileInfo.fileName())
                 .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2));
-            logger->info("Send", "Метод: OBEX (прямой протокол для Android)");
+            logger->info("Send", QString("Метод: OBEX (прямой протокол для %1)").arg(deviceType));
             logger->info("Send", "БЕЗ fsquirt - напрямую через сокет!");
             logger->info("Send", "");
             
-            QMessageBox::information(this, "Успешно!",
-                QString("✓ Файл успешно отправлен на телефон!\n\n"
+            QString message;
+            if (deviceType == "Компьютер") {
+                message = QString("✓ Файл успешно отправлен!\n\n"
                         "Файл: %1 (%2 MB)\n"
-                        "Устройство: %3\n\n"
-                        "Метод: OBEX протокол\n"
-                        "(прямая отправка БЕЗ fsquirt!)\n\n"
-                        "На телефоне файл должен был быть принят.")
-                .arg(fileInfo.fileName())
-                .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
-                .arg(device.name));
+                        "Устройство: %3 (Компьютер)\n\n"
+                        "Метод: OBEX протокол\n\n"
+                        "На %3 появится окно приема файла.\n"
+                        "Примите файл - он сохранится в папку Bluetooth.\n\n"
+                        "ВНИМАНИЕ: Файл НЕ воспроизведется автоматически.\n"
+                        "Это ограничение Windows.")
+                    .arg(fileInfo.fileName())
+                    .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
+                    .arg(device.name);
+            } else {
+                message = QString("✓ Файл успешно отправлен!\n\n"
+                        "Файл: %1 (%2 MB)\n"
+                        "Устройство: %3 (%4)\n\n"
+                        "Метод: OBEX протокол\n\n"
+                        "Файл должен быть принят на устройстве.")
+                    .arg(fileInfo.fileName())
+                    .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
+                    .arg(device.name)
+                    .arg(deviceType);
+            }
+            
+            QMessageBox::information(this, "Успешно!", message);
                 
             QTimer::singleShot(2000, [this]() {
                 ui->progressBar->setVisible(false);

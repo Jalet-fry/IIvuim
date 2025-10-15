@@ -51,9 +51,9 @@ BluetoothDeviceCapabilities BluetoothDeviceData::getCapabilities() const
     case 0x01: // Компьютер (Desktop, Laptop, Server, etc.)
         caps.canReceiveFiles = true;
         caps.canSendFiles = true;
-        caps.supportsOBEX = true;
-        caps.supportsRFCOMM = true;
-        caps.recommendedMethod = "RFCOMM (прямое подключение)";
+        caps.supportsOBEX = true;   // Windows имеет OBEX для приема файлов
+        caps.supportsRFCOMM = true;  // Также поддерживает RFCOMM
+        caps.recommendedMethod = "OBEX (стандартная отправка)";
         break;
         
     case 0x02: // Телефон (Cellular, Cordless, Smartphone)
