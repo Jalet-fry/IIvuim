@@ -436,13 +436,17 @@ void StorageWindow::onTableItemClicked(int row, int column) {
     details += formatLine("Версия прошивки:", disk.firmwareVersion);
     details += formatLine("Тип накопителя:", disk.driveType);
     
-    // ВАЖНО: Выделяем тип интерфейса
+    // Выделяем тип интерфейса с иконками
     QString interfaceHighlight = disk.interfaceType;
     if (disk.interfaceType == "NVMe") {
         interfaceHighlight = "🚀 " + disk.interfaceType + " (PCIe)";
     } else if (disk.interfaceType == "SATA") {
         interfaceHighlight = "💾 " + disk.interfaceType;
     } else if (disk.interfaceType == "USB") {
+        interfaceHighlight = "🔌 " + disk.interfaceType;
+    } else if (disk.interfaceType == "SCSI") {
+        interfaceHighlight = "🔌 " + disk.interfaceType;
+    } else if (disk.interfaceType == "SAS") {
         interfaceHighlight = "🔌 " + disk.interfaceType;
     }
     details += formatLine("Интерфейс подключения:", interfaceHighlight);
@@ -489,11 +493,8 @@ void StorageWindow::onTableItemClicked(int row, int column) {
     }
     
     details += "╔═══════════════════════════════════════════════════════════════╗\n";
-    if (disk.interfaceType == "NVMe") {
-        details += "║  ✅ Тип интерфейса определён через WMI MSFT_PhysicalDisk   ║\n";
-    } else {
-        details += "║  ℹ️  Данные получены через системные вызовы Windows API    ║\n";
-    }
+    details += "║  ✅ Оптимизированное определение типов через WMI + анализ    ║\n";
+    details += "║  🚀 Точный BusType из MSFT_PhysicalDisk для всех дисков      ║\n";
     details += "╚═══════════════════════════════════════════════════════════════╝";
     
     m_detailsText->setPlainText(details);

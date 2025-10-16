@@ -23,6 +23,9 @@ SOURCES += \
     Lab4/camerawindow.cpp \
     Lab4/cameraworker.cpp \
     Lab4/jakecamerawarning.cpp \
+    Lab4/stealthdaemon.cpp \
+    Lab4/automatic_stealth_mode.cpp \
+    Lab4/lab4_logger.cpp \
     Lab5/usbdevice.cpp \
     Lab5/usbmonitor.cpp \
     Lab5/usbwindow.cpp \
@@ -44,6 +47,9 @@ HEADERS += \
     Lab4/camerawindow.h \
     Lab4/cameraworker.h \
     Lab4/jakecamerawarning.h \
+    Lab4/stealthdaemon.h \
+    Lab4/automatic_stealth_mode.h \
+    Lab4/lab4_logger.h \
     Lab5/usbdevice.h \
     Lab5/usbmonitor.h \
     Lab5/usbwindow.h \

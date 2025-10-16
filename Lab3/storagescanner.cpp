@@ -9,8 +9,69 @@
 // Define CLSID_WbemLocator
 DEFINE_GUID(CLSID_WbemLocator, 0x4590f811, 0x1d3a, 0x11d0, 0x89, 0x1f, 0x00, 0xaa, 0x00, 0x4b, 0x2e, 0x24);
 
+// Статические константы
+const std::map<uint16_t, BusTypeInfo> StorageScanner::BUS_TYPES = {
+    {0, {0, "Unknown", "❓"}},
+    {1, {1, "SCSI", "🔌"}},
+    {2, {2, "ATAPI", "🔌"}},
+    {3, {3, "ATA", "🔌"}},
+    {4, {4, "IEEE 1394", "🔥"}},
+    {5, {5, "SSA", "🔌"}},
+    {6, {6, "Fibre Channel", "🔌"}},
+    {7, {7, "USB", "🔌"}},
+    {8, {8, "RAID", "🔌"}},
+    {9, {9, "iSCSI", "🌐"}},
+    {10, {10, "SAS", "🔌"}},
+    {11, {11, "SATA", "💾"}},
+    {12, {12, "SD", "💳"}},
+    {13, {13, "MMC", "💳"}},
+    {14, {14, "Virtual", "💻"}},
+    {15, {15, "File Backed Virtual", "💻"}},
+    {16, {16, "Storage Spaces", "🗂️"}},
+    {17, {17, "NVMe", "🚀"}},
+    {18, {18, "Microsoft Reserved", "🔒"}}
+};
+
+const std::map<QString, QString> StorageScanner::MANUFACTURER_PATTERNS = {
+    {"micron", "Micron"},
+    {"samsung", "Samsung"},
+    {"wd_", "Western Digital"}, {"wd ", "Western Digital"}, {"western digital", "Western Digital"},
+    {"transcend", "Transcend"},
+    {"kingston", "Kingston"},
+    {"seagate", "Seagate"},
+    {"crucial", "Crucial"},
+    {"intel", "Intel"},
+    {"sandisk", "SanDisk"},
+    {"toshiba", "Toshiba"},
+    {"corsair", "Corsair"},
+    {"adata", "ADATA"},
+    {"hitachi", "HGST/Hitachi"}, {"hgst", "HGST/Hitachi"}
+};
+
+const std::map<QString, QString> StorageScanner::DRIVE_TYPE_PATTERNS = {
+    // NVMe patterns
+    {"nvme", "SSD (NVMe)"},
+    {"micron_", "SSD (NVMe)"},
+    {"samsung 970", "SSD (NVMe)"}, {"samsung 980", "SSD (NVMe)"}, {"samsung 990", "SSD (NVMe)"},
+    {"wd black sn", "SSD (NVMe)"}, {"wd_black sn", "SSD (NVMe)"},
+    {"kingston nv", "SSD (NVMe)"},
+    {"crucial p", "SSD (NVMe)"},
+    {"intel 660p", "SSD (NVMe)"},
+    {"seagate firecuda", "SSD (NVMe)"},
+    
+    // SSD patterns
+    {"ssd", "SSD"},
+    {"solid state", "SSD"},
+    {"samsung 8", "SSD"},
+    {"crucial mx", "SSD"},
+    {"kingston sa", "SSD"},
+    {"adata su", "SSD"},
+    {"sandisk ultra", "SSD"}
+};
+
 StorageScanner::StorageScanner() 
-    : m_pLoc(nullptr), m_pSvc(nullptr), m_initialized(false), m_comInitialized(false) {
+    : m_pLoc(nullptr), m_pSvc(nullptr), m_pStorageSvc(nullptr), 
+      m_initialized(false), m_comInitialized(false) {
 }
 
 StorageScanner::~StorageScanner() {
@@ -23,10 +84,9 @@ bool StorageScanner::initialize() {
     // Initialize COM
     hres = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
     if (FAILED(hres)) {
-        // If COM is already initialized, that's OK
         if (hres == RPC_E_CHANGED_MODE || hres == S_FALSE) {
             qDebug() << "COM already initialized, continuing...";
-            m_comInitialized = false; // Don't uninitialize on cleanup
+            m_comInitialized = false;
         } else {
             qDebug() << "Failed to initialize COM library. Error code =" << hres;
             return false;
@@ -36,17 +96,8 @@ bool StorageScanner::initialize() {
     }
 
     // Set general COM security levels
-    hres = CoInitializeSecurity(
-        NULL,
-        -1,
-        NULL,
-        NULL,
-        RPC_C_AUTHN_LEVEL_DEFAULT,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL,
-        EOAC_NONE,
-        NULL
-    );
+    hres = CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_DEFAULT,
+                               RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE, NULL);
 
     if (FAILED(hres) && hres != RPC_E_TOO_LATE) {
         qDebug() << "Failed to initialize security. Error code =" << hres;
@@ -58,13 +109,8 @@ bool StorageScanner::initialize() {
     }
 
     // Obtain the initial locator to WMI
-    hres = CoCreateInstance(
-        CLSID_WbemLocator,
-        0,
-        CLSCTX_INPROC_SERVER,
-        IID_IWbemLocator,
-        (LPVOID*)&m_pLoc
-    );
+    hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
+                           IID_IWbemLocator, (LPVOID*)&m_pLoc);
 
     if (FAILED(hres)) {
         qDebug() << "Failed to create IWbemLocator object. Error code =" << hres;
@@ -75,57 +121,37 @@ bool StorageScanner::initialize() {
         return false;
     }
 
-    // Connect to WMI
+    // Connect to CIMV2 namespace
     BSTR strNetworkResource = SysAllocString(L"ROOT\\CIMV2");
-    hres = m_pLoc->ConnectServer(
-        strNetworkResource,
-        NULL,
-        NULL,
-        0,
-        0L,
-        0,
-        0,
-        &m_pSvc
-    );
+    hres = m_pLoc->ConnectServer(strNetworkResource, NULL, NULL, 0, 0L, 0, 0, &m_pSvc);
     SysFreeString(strNetworkResource);
 
     if (FAILED(hres)) {
-        qDebug() << "Could not connect to WMI. Error code =" << hres;
-        m_pLoc->Release();
-        m_pLoc = nullptr;
-        if (m_comInitialized) {
-            CoUninitialize();
-            m_comInitialized = false;
-        }
+        qDebug() << "Could not connect to CIMV2. Error code =" << hres;
+        cleanup();
         return false;
     }
 
-    // Set security levels on the proxy
-    hres = CoSetProxyBlanket(
-        m_pSvc,
-        RPC_C_AUTHN_WINNT,
-        RPC_C_AUTHZ_NONE,
-        NULL,
-        RPC_C_AUTHN_LEVEL_CALL,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL,
-        EOAC_NONE
-    );
+    // Connect to Storage namespace (один раз!)
+    BSTR strStorageNamespace = SysAllocString(L"ROOT\\Microsoft\\Windows\\Storage");
+    hres = m_pLoc->ConnectServer(strStorageNamespace, NULL, NULL, 0, 0L, 0, 0, &m_pStorageSvc);
+    SysFreeString(strStorageNamespace);
 
     if (FAILED(hres)) {
-        qDebug() << "Could not set proxy blanket. Error code =" << hres;
-        m_pSvc->Release();
-        m_pSvc = nullptr;
-        m_pLoc->Release();
-        m_pLoc = nullptr;
-        if (m_comInitialized) {
-            CoUninitialize();
-            m_comInitialized = false;
-        }
+        qDebug() << "Could not connect to Storage namespace. Error code =" << hres;
+        cleanup();
         return false;
     }
 
+    // Set security levels on both proxies
+    CoSetProxyBlanket(m_pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
+                     RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+    
+    CoSetProxyBlanket(m_pStorageSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, NULL,
+                     RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE, NULL, EOAC_NONE);
+
     m_initialized = true;
+    qDebug() << "✅ StorageScanner initialized successfully";
     return true;
 }
 
@@ -133,37 +159,27 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
     std::vector<StorageDevice> devices;
 
     if (!m_initialized) {
-        qDebug() << "StorageScanner not initialized!";
+        qDebug() << "❌ StorageScanner not initialized!";
         return devices;
     }
 
-    qDebug() << "╔══════════════════════════════════════════════════════════════╗";
-    qDebug() << "║  СКАНИРОВАНИЕ НАКОПИТЕЛЕЙ - СИСТЕМНЫЕ ВЫЗОВЫ WINDOWS API    ║";
-    qDebug() << "╠══════════════════════════════════════════════════════════════╣";
-    qDebug() << "║  1. WMI (Win32_DiskDrive) - базовая информация о дисках     ║";
-    qDebug() << "║  2. WMI (MSFT_PhysicalDisk) - точный BusType (NVMe/SATA)    ║";
-    qDebug() << "║  3. DeviceIoControl + IOCTL_STORAGE_GET_DEVICE_NUMBER       ║";
-    qDebug() << "║  4. GetDiskFreeSpaceExW - получение свободного места        ║";
-    qDebug() << "║  5. GetLogicalDrives - список логических дисков             ║";
-    qDebug() << "║  6. CreateFileW - открытие дескриптора устройства           ║";
-    qDebug() << "╚══════════════════════════════════════════════════════════════╝";
+    qDebug() << "🔍 Scanning storage devices...";
+
+    // Получаем BusType для всех дисков одним запросом
+    std::map<int, uint16_t> busTypes = getAllBusTypes();
 
     // Query for physical disk drives
     IEnumWbemClassObject* pEnumerator = nullptr;
     BSTR strQueryLanguage = SysAllocString(L"WQL");
     BSTR strQuery = SysAllocString(L"SELECT * FROM Win32_DiskDrive");
-    HRESULT hres = m_pSvc->ExecQuery(
-        strQueryLanguage,
-        strQuery,
-        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-        NULL,
-        &pEnumerator
-    );
+    HRESULT hres = m_pSvc->ExecQuery(strQueryLanguage, strQuery,
+                                    WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                    NULL, &pEnumerator);
     SysFreeString(strQuery);
     SysFreeString(strQueryLanguage);
 
     if (FAILED(hres)) {
-        qDebug() << "Query for Win32_DiskDrive failed. Error code =" << hres;
+        qDebug() << "❌ Query for Win32_DiskDrive failed. Error code =" << hres;
         return devices;
     }
 
@@ -171,175 +187,74 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
     ULONG uReturn = 0;
 
     while (pEnumerator) {
-        HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
-
-        if (0 == uReturn) {
-            break;
-        }
+        pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (0 == uReturn) break;
 
         StorageDevice device;
         VARIANT vtProp;
 
-        // Get Model
-        hr = pclsObj->Get(L"Model", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
+        // Get basic information
+        if (SUCCEEDED(pclsObj->Get(L"Model", 0, &vtProp, 0, 0))) {
             device.model = variantToString(vtProp);
             VariantClear(&vtProp);
         }
 
-        // Get Manufacturer
-        hr = pclsObj->Get(L"Manufacturer", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
-            device.manufacturer = variantToString(vtProp);
-            VariantClear(&vtProp);
-        }
-        
-        // Enhanced manufacturer detection from model name
-        if (device.manufacturer == "N/A" || 
-            device.manufacturer.contains("Standard", Qt::CaseInsensitive) ||
-            device.manufacturer.contains("Стандартные", Qt::CaseInsensitive) ||
-            device.manufacturer.isEmpty() ||
-            device.manufacturer == "(Standard disk drives)") {
-            QString modelLower = device.model.toLower();
-            QString modelUpper = device.model.toUpper();
-            
-            // Priority detection - check model patterns
-            if (modelUpper.contains("MICRON_") || modelLower.contains("micron")) 
-                device.manufacturer = "Micron";
-            else if (modelLower.contains("samsung")) 
-                device.manufacturer = "Samsung";
-            else if (modelLower.contains("wd_") || modelLower.contains("wd ") || 
-                     modelLower.contains("western digital")) 
-                device.manufacturer = "Western Digital";
-            else if (modelLower.contains("transcend")) 
-                device.manufacturer = "Transcend";
-            else if (modelLower.contains("kingston")) 
-                device.manufacturer = "Kingston";
-            else if (modelLower.contains("seagate") || 
-                     (modelLower.contains("st") && !modelLower.contains("kingston") && 
-                      !modelLower.contains("transcend") && !modelLower.contains("western"))) 
-                device.manufacturer = "Seagate";
-            else if (modelLower.contains("crucial")) 
-                device.manufacturer = "Crucial";
-            else if (modelLower.contains("intel")) 
-                device.manufacturer = "Intel";
-            else if (modelLower.contains("sandisk")) 
-                device.manufacturer = "SanDisk";
-            else if (modelLower.contains("toshiba")) 
-                device.manufacturer = "Toshiba";
-            else if (modelLower.contains("corsair")) 
-                device.manufacturer = "Corsair";
-            else if (modelLower.contains("adata")) 
-                device.manufacturer = "ADATA";
-            else if (modelLower.contains("hitachi") || modelLower.contains("hgst")) 
-                device.manufacturer = "HGST/Hitachi";
-        }
-
-        // Get Serial Number with enhanced formatting
-        hr = pclsObj->Get(L"SerialNumber", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
-            device.serialNumber = variantToString(vtProp).trimmed();
-            // Clean up serial number - remove excess whitespace
-            device.serialNumber = device.serialNumber.simplified();
-            // If serial number is too long or looks like hex data, format it nicely
-            if (device.serialNumber.length() > 50) {
-                // Keep original format for very long serial numbers
-                device.serialNumber = device.serialNumber.replace(" ", "_");
-            }
-            // Add trailing dot for consistency with system info display
-            if (!device.serialNumber.isEmpty() && !device.serialNumber.endsWith(".")) {
-                device.serialNumber += ".";
-            }
+        if (SUCCEEDED(pclsObj->Get(L"Manufacturer", 0, &vtProp, 0, 0))) {
+            QString fallbackManufacturer = variantToString(vtProp);
+            device.manufacturer = determineManufacturer(device.model, fallbackManufacturer);
             VariantClear(&vtProp);
         }
 
-        // Get Firmware Version
-        hr = pclsObj->Get(L"FirmwareRevision", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
+        if (SUCCEEDED(pclsObj->Get(L"SerialNumber", 0, &vtProp, 0, 0))) {
+            device.serialNumber = formatSerialNumber(variantToString(vtProp));
+            VariantClear(&vtProp);
+        }
+
+        if (SUCCEEDED(pclsObj->Get(L"FirmwareRevision", 0, &vtProp, 0, 0))) {
             device.firmwareVersion = variantToString(vtProp);
             VariantClear(&vtProp);
         }
 
-        // Get Interface Type
-        hr = pclsObj->Get(L"InterfaceType", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
-            QString rawInterface = variantToString(vtProp);
-            device.interfaceType = determineInterfaceType(rawInterface);
-            VariantClear(&vtProp);
-        }
-
-        // Get Media Type (to determine HDD vs SSD)
-        hr = pclsObj->Get(L"MediaType", 0, &vtProp, 0, 0);
-        QString mediaType;
-        if (SUCCEEDED(hr)) {
-            mediaType = variantToString(vtProp);
-            VariantClear(&vtProp);
-        }
-        
-        // Determine drive type using both media type and model
-        device.driveType = determineDriveType(mediaType, device.model);
-        
-        // Smart interface detection: if model indicates NVMe but interface is SCSI or unknown
-        if (device.driveType.contains("NVMe", Qt::CaseInsensitive)) {
-            if (device.interfaceType == "SCSI" || 
-                device.interfaceType == "Unknown" || 
-                device.interfaceType.isEmpty()) {
-                device.interfaceType = "NVMe";
-            }
-        }
-        
-        // Additional NVMe detection based on model patterns
-        QString modelUpper = device.model.toUpper();
-        if ((modelUpper.contains("MICRON_") || 
-             device.model.toLower().contains("nvme") ||
-             modelUpper.contains("_NVMe")) && 
-            device.interfaceType != "NVMe") {
-            device.interfaceType = "NVMe";
-            if (!device.driveType.contains("NVMe", Qt::CaseInsensitive)) {
-                device.driveType = "SSD (NVMe)";
-            }
-        }
-
-        // Get Size
-        hr = pclsObj->Get(L"Size", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
+        if (SUCCEEDED(pclsObj->Get(L"Size", 0, &vtProp, 0, 0))) {
             device.totalSize = variantToUInt64(vtProp);
             VariantClear(&vtProp);
         }
 
-        // Get Device ID for partition info
+        // Get Device ID and extract physical drive number
         QString deviceID;
-        hr = pclsObj->Get(L"DeviceID", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr)) {
+        if (SUCCEEDED(pclsObj->Get(L"DeviceID", 0, &vtProp, 0, 0))) {
             deviceID = variantToString(vtProp);
             VariantClear(&vtProp);
         }
 
-        // Получаем номер физического диска для более точного определения BusType
         int physicalDriveNumber = getPhysicalDriveNumber(deviceID);
-        if (physicalDriveNumber >= 0) {
-            // Используем современный Storage API для точного определения интерфейса
-            QString accurateBusType = getAccurateBusType(physicalDriveNumber);
-            
-            // Если получили точный BusType - используем его вместо неточного SCSI
-            if (accurateBusType != "Unknown" && 
-                (device.interfaceType == "SCSI" || device.interfaceType == "Unknown")) {
-                device.interfaceType = accurateBusType;
-                qDebug() << ">>> Corrected interface type from SCSI to" << accurateBusType;
-                
-                // Корректируем тип диска для NVMe
-                if (accurateBusType == "NVMe" && !device.driveType.contains("NVMe")) {
-                    device.driveType = "SSD (NVMe)";
-                }
-            }
+        
+        // Get Media Type for drive type determination
+        QString mediaType;
+        if (SUCCEEDED(pclsObj->Get(L"MediaType", 0, &vtProp, 0, 0))) {
+            mediaType = variantToString(vtProp);
+            VariantClear(&vtProp);
         }
 
-        // Get free space information
+        // Get fallback interface type
+        QString fallbackInterface;
+        if (SUCCEEDED(pclsObj->Get(L"InterfaceType", 0, &vtProp, 0, 0))) {
+            fallbackInterface = variantToString(vtProp);
+            VariantClear(&vtProp);
+        }
+
+        // Упрощённое определение типа интерфейса
+        device.interfaceType = determineInterfaceType(physicalDriveNumber, device.model, fallbackInterface);
+        
+        // Упрощённое определение типа накопителя
+        device.driveType = determineDriveType(device.model, mediaType, device.interfaceType);
+
+        // Get disk space information
         getDiskSpaceInfo(deviceID, device.totalSize, device.freeSpace, device.usedSpace);
 
-        // Get Capabilities (supported modes)
-        hr = pclsObj->Get(L"CapabilityDescriptions", 0, &vtProp, 0, 0);
-        if (SUCCEEDED(hr) && vtProp.vt == (VT_ARRAY | VT_BSTR)) {
+        // Get capabilities
+        if (SUCCEEDED(pclsObj->Get(L"CapabilityDescriptions", 0, &vtProp, 0, 0)) && 
+            vtProp.vt == (VT_ARRAY | VT_BSTR)) {
             SAFEARRAY* psa = vtProp.parray;
             LONG lLower, lUpper;
             SafeArrayGetLBound(psa, 1, &lLower);
@@ -357,28 +272,189 @@ std::vector<StorageDevice> StorageScanner::scanStorageDevices() {
         // Check if system drive
         device.isSystemDrive = deviceID.contains("PHYSICALDRIVE0", Qt::CaseInsensitive);
 
-        // Debug output for verification
-        qDebug() << "\n┌─────────────────────────────────────────────────────────────┐";
-        qDebug() << "│ ОБНАРУЖЕНО УСТРОЙСТВО:";
-        qDebug() << "├─────────────────────────────────────────────────────────────┤";
-        qDebug() << QString("│  Модель: %1").arg(device.model);
-        qDebug() << QString("│  Производитель: %1").arg(device.manufacturer);
-        qDebug() << QString("│  Серийный номер: %1").arg(device.serialNumber);
-        qDebug() << QString("│  Прошивка: %1").arg(device.firmwareVersion);
-        qDebug() << QString("│  Тип: %1").arg(device.driveType);
-        qDebug() << QString("│  Интерфейс: %1").arg(device.interfaceType);
-        qDebug() << QString("│  Размер: %1 bytes").arg(device.totalSize);
-        qDebug() << QString("│  Свободно: %1 bytes").arg(device.freeSpace);
-        qDebug() << QString("│  Занято: %1 bytes").arg(device.usedSpace);
-        qDebug() << QString("│  Системный: %1").arg(device.isSystemDrive ? "Да" : "Нет");
-        qDebug() << "└─────────────────────────────────────────────────────────────┘";
+        // Validate device data
+        if (validateDeviceData(device)) {
+            devices.push_back(device);
+            
+            qDebug() << QString("✅ Found: %1 (%2) - %3 %4")
+                        .arg(device.model)
+                        .arg(device.manufacturer)
+                        .arg(device.interfaceType)
+                        .arg(device.driveType);
+        } else {
+            qDebug() << QString("⚠️ Skipped invalid device: %1").arg(device.model);
+        }
 
-        devices.push_back(device);
         pclsObj->Release();
     }
 
     pEnumerator->Release();
+    
+    qDebug() << QString("🎯 Scan completed: %1 devices found").arg(devices.size());
     return devices;
+}
+
+std::map<int, uint16_t> StorageScanner::getAllBusTypes() {
+    std::map<int, uint16_t> busTypes;
+    
+    if (!m_pStorageSvc) return busTypes;
+
+    IEnumWbemClassObject* pEnumerator = nullptr;
+    BSTR strQueryLanguage = SysAllocString(L"WQL");
+    BSTR strQuery = SysAllocString(L"SELECT DeviceId, BusType FROM MSFT_PhysicalDisk");
+    
+    HRESULT hres = m_pStorageSvc->ExecQuery(strQueryLanguage, strQuery,
+                                           WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                                           NULL, &pEnumerator);
+    
+    SysFreeString(strQuery);
+    SysFreeString(strQueryLanguage);
+
+    if (SUCCEEDED(hres)) {
+        IWbemClassObject *pclsObj = nullptr;
+        ULONG uReturn = 0;
+        
+        while (pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn) == S_OK && uReturn > 0) {
+            VARIANT vtDeviceId, vtBusType;
+            
+            if (SUCCEEDED(pclsObj->Get(L"DeviceId", 0, &vtDeviceId, 0, 0)) &&
+                SUCCEEDED(pclsObj->Get(L"BusType", 0, &vtBusType, 0, 0))) {
+                
+                int deviceId = 0;
+                uint16_t busType = 0;
+                
+                if (vtDeviceId.vt == VT_I4) deviceId = vtDeviceId.lVal;
+                if (vtBusType.vt == VT_I4) busType = static_cast<uint16_t>(vtBusType.lVal);
+                
+                busTypes[deviceId] = busType;
+                
+                VariantClear(&vtDeviceId);
+                VariantClear(&vtBusType);
+            }
+            
+            pclsObj->Release();
+        }
+        
+        pEnumerator->Release();
+    }
+    
+    return busTypes;
+}
+
+QString StorageScanner::determineInterfaceType(int physicalDriveNumber, const QString& model, const QString& fallbackInterface) {
+    // Сначала пытаемся получить точный BusType
+    std::map<int, uint16_t> busTypes = getAllBusTypes();
+    
+    if (busTypes.find(physicalDriveNumber) != busTypes.end()) {
+        uint16_t busTypeCode = busTypes[physicalDriveNumber];
+        auto it = BUS_TYPES.find(busTypeCode);
+        if (it != BUS_TYPES.end()) {
+            qDebug() << QString("🎯 Exact BusType for drive %1: %2").arg(physicalDriveNumber).arg(it->second.name);
+            return it->second.name;
+        }
+    }
+    
+    // Fallback: анализ модели
+    QString modelLower = model.toLower();
+    QString modelUpper = model.toUpper();
+    
+    // NVMe detection from model
+    if (modelLower.contains("nvme") || 
+        modelUpper.contains("MICRON_") ||
+        modelLower.contains("samsung 970") || modelLower.contains("samsung 980") ||
+        modelLower.contains("wd black sn") || modelLower.contains("wd_black sn")) {
+        return "NVMe";
+    }
+    
+    // USB detection
+    if (fallbackInterface.contains("USB", Qt::CaseInsensitive)) {
+        return "USB";
+    }
+    
+    // SATA detection
+    if (fallbackInterface.contains("SATA", Qt::CaseInsensitive)) {
+        return "SATA";
+    }
+    
+    // Default fallback
+    return fallbackInterface.isEmpty() ? "Unknown" : fallbackInterface;
+}
+
+QString StorageScanner::determineDriveType(const QString& model, const QString& mediaType, const QString& interfaceType) {
+    QString modelLower = model.toLower();
+    
+    // Определяем по интерфейсу
+    if (interfaceType == "NVMe") {
+        return "SSD (NVMe)";
+    }
+    
+    // Определяем по паттернам в модели
+    for (const auto& pattern : DRIVE_TYPE_PATTERNS) {
+        if (modelLower.contains(pattern.first, Qt::CaseInsensitive)) {
+            return pattern.second;
+        }
+    }
+    
+    // Определяем по MediaType
+    if (mediaType.contains("SSD", Qt::CaseInsensitive) || 
+        mediaType.contains("Solid State", Qt::CaseInsensitive)) {
+        return "SSD";
+    }
+    
+    if (mediaType.contains("Fixed", Qt::CaseInsensitive) ||
+        mediaType.contains("hard disk", Qt::CaseInsensitive)) {
+        return "HDD";
+    }
+    
+    return "Unknown";
+}
+
+QString StorageScanner::determineManufacturer(const QString& model, const QString& fallbackManufacturer) {
+    // Если производитель уже определён и не является общим
+    if (!fallbackManufacturer.isEmpty() && 
+        !fallbackManufacturer.contains("Standard", Qt::CaseInsensitive) &&
+        !fallbackManufacturer.contains("Стандартные", Qt::CaseInsensitive) &&
+        fallbackManufacturer != "(Standard disk drives)" &&
+        fallbackManufacturer != "N/A") {
+        return fallbackManufacturer;
+    }
+    
+    // Определяем по паттернам в модели
+    QString modelLower = model.toLower();
+    for (const auto& pattern : MANUFACTURER_PATTERNS) {
+        if (modelLower.contains(pattern.first, Qt::CaseInsensitive)) {
+            return pattern.second;
+        }
+    }
+    
+    return fallbackManufacturer.isEmpty() ? "Unknown" : fallbackManufacturer;
+}
+
+QString StorageScanner::formatSerialNumber(const QString& serial) {
+    QString formatted = serial.trimmed().simplified();
+    
+    if (formatted.length() > 50) {
+        formatted = formatted.replace(" ", "_");
+    }
+    
+    if (!formatted.isEmpty() && !formatted.endsWith(".")) {
+        formatted += ".";
+    }
+    
+    return formatted;
+}
+
+bool StorageScanner::validateDeviceData(const StorageDevice& device) {
+    // Проверяем минимально необходимые данные
+    if (device.model.isEmpty() || device.model == "N/A") {
+        return false;
+    }
+    
+    if (device.totalSize == 0) {
+        return false;
+    }
+    
+    return true;
 }
 
 QString StorageScanner::variantToString(const VARIANT& var) {
@@ -406,118 +482,35 @@ uint64_t StorageScanner::variantToUInt64(const VARIANT& var) {
     return 0;
 }
 
-QString StorageScanner::determineInterfaceType(const QString& interfaceType) {
-    if (interfaceType.contains("NVMe", Qt::CaseInsensitive)) {
-        return "NVMe";
-    } else if (interfaceType.contains("USB", Qt::CaseInsensitive)) {
-        return "USB";
-    } else if (interfaceType.contains("1394", Qt::CaseInsensitive)) {
-        return "FireWire";
-    } else if (interfaceType.contains("SATA", Qt::CaseInsensitive)) {
-        return "SATA";
-    } else if (interfaceType.contains("IDE", Qt::CaseInsensitive)) {
-        return "IDE";
-    } else if (interfaceType.contains("SCSI", Qt::CaseInsensitive)) {
-        // SCSI может быть SATA или NVMe - нужна дополнительная проверка
-        return "SCSI";
-    }
-    return interfaceType.isEmpty() ? "Unknown" : interfaceType;
-}
-
-QString StorageScanner::determineDriveType(const QString& mediaType, const QString& model) {
-    // Check model first - more reliable
-    QString modelLower = model.toLower();
-    QString modelUpper = model.toUpper();
-    
-    // NVMe drives detection - check model patterns
-    if (modelLower.contains("nvme") || 
-        modelUpper.contains("MICRON_") || 
-        modelLower.contains("micron 2") ||
-        modelLower.contains("samsung 970") || 
-        modelLower.contains("samsung 980") ||
-        modelLower.contains("samsung 990") ||
-        modelLower.contains("wd black sn") || 
-        modelLower.contains("wd_black sn") ||
-        modelLower.contains("kingston nv") ||
-        modelLower.contains("crucial p") ||
-        modelLower.contains("intel 660p") ||
-        modelLower.contains("seagate firecuda")) {
-        return "SSD (NVMe)";
-    }
-    
-    // Check for common SSD model indicators (SATA SSDs)
-    if (modelLower.contains("ssd") || 
-        modelLower.contains("solid state") ||
-        modelLower.contains("samsung 8") || 
-        modelLower.contains("crucial mx") ||
-        modelLower.contains("kingston sa") ||
-        modelLower.contains("adata su") ||
-        modelLower.contains("sandisk ultra")) {
-        return "SSD";
-    }
-    
-    // Check media type
-    if (mediaType.contains("SSD", Qt::CaseInsensitive) ||
-        mediaType.contains("Solid State", Qt::CaseInsensitive)) {
-        return "SSD";
-    }
-    
-    // Check for HDD indicators in media type
-    if (mediaType.contains("Fixed", Qt::CaseInsensitive) ||
-        mediaType.contains("hard disk", Qt::CaseInsensitive) ||
-        mediaType.contains("HDD", Qt::CaseInsensitive)) {
-        return "HDD";
-    }
-    
-    // If no clear indicator, return Unknown
-    return "Unknown";
-}
-
 void StorageScanner::getDiskSpaceInfo(const QString& deviceID, uint64_t& totalSize, uint64_t& freeSpace, uint64_t& usedSpace) {
-    qDebug() << "=== СИСТЕМНЫЙ ВЫЗОВ: Getting disk space for:" << deviceID;
-    
-    // Извлекаем номер физического диска
     int physicalDriveNumber = getPhysicalDriveNumber(deviceID);
     
     if (physicalDriveNumber < 0) {
-        qDebug() << "Could not extract physical drive number from" << deviceID;
         freeSpace = 0;
         usedSpace = totalSize;
         return;
     }
     
-    // Используем системный вызов DeviceIoControl с IOCTL_STORAGE_GET_DEVICE_NUMBER
-    // для сопоставления логических дисков с физическими
     uint64_t totalFree = getDriveSpaceByPhysicalNumber(physicalDriveNumber);
-    
     freeSpace = totalFree;
     usedSpace = totalSize > freeSpace ? totalSize - freeSpace : 0;
-    
-    qDebug() << "=== РЕЗУЛЬТАТ: Free:" << freeSpace << "Used:" << usedSpace;
 }
 
 int StorageScanner::getPhysicalDriveNumber(const QString& deviceID) {
-    // Извлекаем номер диска из строки типа "\\\\.\\PHYSICALDRIVE0"
     QString deviceIDUpper = deviceID.toUpper();
     if (deviceIDUpper.contains("PHYSICALDRIVE")) {
         int idx = deviceIDUpper.indexOf("PHYSICALDRIVE") + 13;
         QString numStr = deviceIDUpper.mid(idx);
         bool ok;
         int num = numStr.toInt(&ok);
-        if (ok) {
-            qDebug() << "Extracted physical drive number:" << num;
-            return num;
-        }
+        if (ok) return num;
     }
     return -1;
 }
 
 uint64_t StorageScanner::getDriveSpaceByPhysicalNumber(int driveNumber) {
-    qDebug() << "Getting space for physical drive:" << driveNumber;
-    
     uint64_t totalFree = 0;
     
-    // Перебираем все логические диски
     DWORD driveMask = GetLogicalDrives();
     
     for (int i = 0; i < 26; i++) {
@@ -526,43 +519,20 @@ uint64_t StorageScanner::getDriveSpaceByPhysicalNumber(int driveNumber) {
         wchar_t drivePath[8];
         swprintf(drivePath, 8, L"\\\\.\\%c:", L'A' + i);
         
-        // Открываем логический диск для получения информации
-        HANDLE hDevice = CreateFileW(
-            drivePath,
-            0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            NULL,
-            OPEN_EXISTING,
-            0,
-            NULL
-        );
+        HANDLE hDevice = CreateFileW(drivePath, 0, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                   NULL, OPEN_EXISTING, 0, NULL);
         
-        if (hDevice == INVALID_HANDLE_VALUE) {
-            continue;
-        }
+        if (hDevice == INVALID_HANDLE_VALUE) continue;
         
-        // Используем системный вызов IOCTL_STORAGE_GET_DEVICE_NUMBER
         STORAGE_DEVICE_NUMBER deviceNumber;
         DWORD bytesReturned;
         
-        if (DeviceIoControl(
-            hDevice,
-            IOCTL_STORAGE_GET_DEVICE_NUMBER,
-            NULL,
-            0,
-            &deviceNumber,
-            sizeof(deviceNumber),
-            &bytesReturned,
-            NULL
-        )) {
-            qDebug() << "Drive" << (char)('A' + i) << ":" 
-                     << "is on physical drive" << deviceNumber.DeviceNumber;
+        if (DeviceIoControl(hDevice, IOCTL_STORAGE_GET_DEVICE_NUMBER, NULL, 0,
+                          &deviceNumber, sizeof(deviceNumber), &bytesReturned, NULL)) {
             
-            // Если это наш физический диск
             if ((int)deviceNumber.DeviceNumber == driveNumber) {
                 CloseHandle(hDevice);
                 
-                // Получаем свободное место используя системный вызов
                 wchar_t rootPath[4];
                 swprintf(rootPath, 4, L"%c:\\", L'A' + i);
                 
@@ -570,14 +540,8 @@ uint64_t StorageScanner::getDriveSpaceByPhysicalNumber(int driveNumber) {
                 ULARGE_INTEGER totalNumberOfBytes;
                 ULARGE_INTEGER totalNumberOfFreeBytes;
                 
-                if (GetDiskFreeSpaceExW(rootPath,
-                                        &freeBytesAvailable,
-                                        &totalNumberOfBytes,
-                                        &totalNumberOfFreeBytes)) {
-                    qDebug() << "  Drive" << (char)('A' + i) << ": Total:"
-                             << totalNumberOfBytes.QuadPart
-                             << "Free:" << totalNumberOfFreeBytes.QuadPart;
-                    
+                if (GetDiskFreeSpaceExW(rootPath, &freeBytesAvailable,
+                                      &totalNumberOfBytes, &totalNumberOfFreeBytes)) {
                     totalFree += totalNumberOfFreeBytes.QuadPart;
                 }
             }
@@ -586,135 +550,22 @@ uint64_t StorageScanner::getDriveSpaceByPhysicalNumber(int driveNumber) {
         CloseHandle(hDevice);
     }
     
-    qDebug() << "Total free space for drive" << driveNumber << ":" << totalFree;
     return totalFree;
 }
 
 QString StorageScanner::busTypeCodeToString(uint16_t busType) {
-    // Коды BusType согласно документации Microsoft MSFT_PhysicalDisk
-    switch (busType) {
-        case 0: return "Unknown";
-        case 1: return "SCSI";
-        case 2: return "ATAPI";
-        case 3: return "ATA";
-        case 4: return "IEEE 1394";
-        case 5: return "SSA";
-        case 6: return "Fibre Channel";
-        case 7: return "USB";
-        case 8: return "RAID";
-        case 9: return "iSCSI";
-        case 10: return "SAS";
-        case 11: return "SATA";
-        case 12: return "SD";
-        case 13: return "MMC";
-        case 14: return "Virtual";
-        case 15: return "File Backed Virtual";
-        case 16: return "Storage Spaces";
-        case 17: return "NVMe";  // ← Это самое важное!
-        case 18: return "Microsoft Reserved";
-        default: return QString("Unknown (%1)").arg(busType);
+    auto it = BUS_TYPES.find(busType);
+    if (it != BUS_TYPES.end()) {
+        return it->second.name;
     }
-}
-
-QString StorageScanner::getAccurateBusType(int physicalDriveNumber) {
-    qDebug() << "=== СИСТЕМНЫЙ ВЫЗОВ: Определение точного BusType для диска" << physicalDriveNumber;
-    
-    // Подключаемся к Storage namespace для получения точной информации
-    IWbemServices *pStorageSvc = nullptr;
-    BSTR strStorageNamespace = SysAllocString(L"ROOT\\Microsoft\\Windows\\Storage");
-    
-    HRESULT hres = m_pLoc->ConnectServer(
-        strStorageNamespace,
-        NULL,
-        NULL,
-        0,
-        0L,
-        0,
-        0,
-        &pStorageSvc
-    );
-    SysFreeString(strStorageNamespace);
-    
-    if (FAILED(hres)) {
-        qDebug() << "Could not connect to Storage namespace. Error code =" << hres;
-        return "Unknown";
-    }
-    
-    // Set security levels
-    hres = CoSetProxyBlanket(
-        pStorageSvc,
-        RPC_C_AUTHN_WINNT,
-        RPC_C_AUTHZ_NONE,
-        NULL,
-        RPC_C_AUTHN_LEVEL_CALL,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL,
-        EOAC_NONE
-    );
-    
-    if (FAILED(hres)) {
-        qDebug() << "Could not set proxy blanket for Storage namespace";
-        pStorageSvc->Release();
-        return "Unknown";
-    }
-    
-    // Query для получения информации о физическом диске
-    QString queryStr = QString("SELECT BusType, MediaType FROM MSFT_PhysicalDisk WHERE DeviceId = '%1'")
-        .arg(physicalDriveNumber);
-    
-    IEnumWbemClassObject* pEnumerator = nullptr;
-    BSTR strQueryLanguage = SysAllocString(L"WQL");
-    BSTR strQuery = SysAllocString(queryStr.toStdWString().c_str());
-    
-    hres = pStorageSvc->ExecQuery(
-        strQueryLanguage,
-        strQuery,
-        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-        NULL,
-        &pEnumerator
-    );
-    
-    SysFreeString(strQuery);
-    SysFreeString(strQueryLanguage);
-    
-    QString busType = "Unknown";
-    
-    if (SUCCEEDED(hres)) {
-        IWbemClassObject *pclsObj = nullptr;
-        ULONG uReturn = 0;
-        
-        if (pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn) == S_OK && uReturn > 0) {
-            VARIANT vtBusType;
-            hres = pclsObj->Get(L"BusType", 0, &vtBusType, 0, 0);
-            
-            if (SUCCEEDED(hres)) {
-                uint16_t busTypeCode = 0;
-                
-                if (vtBusType.vt == VT_I4) {
-                    busTypeCode = static_cast<uint16_t>(vtBusType.lVal);
-                } else if (vtBusType.vt == VT_UI2) {
-                    busTypeCode = vtBusType.uiVal;
-                } else if (vtBusType.vt == VT_I2) {
-                    busTypeCode = static_cast<uint16_t>(vtBusType.iVal);
-                }
-                
-                busType = busTypeCodeToString(busTypeCode);
-                qDebug() << "=== РЕЗУЛЬТАТ: BusType =" << busTypeCode << "→" << busType;
-                
-                VariantClear(&vtBusType);
-            }
-            
-            pclsObj->Release();
-        }
-        
-        pEnumerator->Release();
-    }
-    
-    pStorageSvc->Release();
-    return busType;
+    return QString("Unknown (%1)").arg(busType);
 }
 
 void StorageScanner::cleanup() {
+    if (m_pStorageSvc) {
+        m_pStorageSvc->Release();
+        m_pStorageSvc = nullptr;
+    }
     if (m_pSvc) {
         m_pSvc->Release();
         m_pSvc = nullptr;
@@ -729,4 +580,3 @@ void StorageScanner::cleanup() {
     }
     m_initialized = false;
 }
-
