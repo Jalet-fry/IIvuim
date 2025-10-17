@@ -150,6 +150,20 @@ void JakeCameraWarning::showWarning(WarningType type)
             hideDelay = 2000;
             setStyleSheet("QWidget { background-color: rgba(220, 255, 220, 240); border: 3px solid #4CAF50; border-radius: 10px; }");
             break;
+            
+        case KEYWORD_DETECTED:
+            gifPath = "Animation/Jake laugh.gif";
+            message = "🔍 Ключевое слово!";
+            hideDelay = 3000;
+            setStyleSheet("QWidget { background-color: rgba(255, 235, 59, 240); border: 3px solid #FF9800; border-radius: 10px; }");
+            break;
+            
+        case STEALTH_DAEMON:
+            gifPath = "Animation/Jake vig eyes.gif";
+            message = "🕵️ Демон активен!";
+            hideDelay = 4000;
+            setStyleSheet("QWidget { background-color: rgba(255, 200, 200, 240); border: 3px solid #E91E63; border-radius: 10px; }");
+            break;
     }
     
     loadGif(gifPath, message);

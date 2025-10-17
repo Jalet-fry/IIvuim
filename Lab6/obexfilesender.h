@@ -6,6 +6,7 @@
 #include <winsock2.h>
 #include <ws2bth.h>
 #include <BluetoothAPIs.h>
+#include <bthdef.h>  // Для системного RFCOMM_PROTOCOL_UUID
 
 class BluetoothLogger;
 
@@ -37,6 +38,8 @@ class BluetoothLogger;
 static const GUID OBEX_PUSH_SERVICE_UUID = 
     { 0x00001105, 0x0000, 0x1000, { 0x80, 0x00, 0x00, 0x80, 0x5F, 0x9B, 0x34, 0xFB } };
 
+// RFCOMM Protocol UUID для ПК-ПК передачи (используем системный RFCOMM_PROTOCOL_UUID)
+
 // Класс для прямой отправки файлов через OBEX протокол
 class ObexFileSender : public QObject
 {
@@ -48,6 +51,9 @@ public:
     
     // Отправка файла через OBEX напрямую на Android/телефон
     bool sendFileViaObex(const QString &filePath, const QString &deviceAddress, const QString &deviceName);
+    
+    // Отправка файла через RFCOMM напрямую на компьютер
+    bool sendFileViaRfcomm(const QString &filePath, const QString &deviceAddress, const QString &deviceName);
     
 signals:
     void transferStarted(const QString &fileName);

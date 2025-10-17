@@ -96,6 +96,49 @@ BluetoothWindow::BluetoothWindow(QWidget *parent)
                 ui->progressBar->setVisible(false);
             });
     
+    // Создаем Bluetooth сервер для приема файлов ПК-ПК
+    btServer = new BluetoothServer(logger, this);
+    connect(btServer, &BluetoothServer::serverStarted,
+            this, [this]() {
+                logger->success("Server", "✓ Сервер запущен");
+                ui->serverStatusLabel->setText("Сервер: Запущен");
+                ui->serverStatusLabel->setStyleSheet("font-size: 12px; padding: 5px; color: #4CAF50; font-weight: bold;");
+                ui->startServerButton->setEnabled(false);
+                ui->stopServerButton->setEnabled(true);
+            });
+    connect(btServer, &BluetoothServer::serverStopped,
+            this, [this]() {
+                logger->info("Server", "Сервер остановлен");
+                ui->serverStatusLabel->setText("Сервер: Остановлен");
+                ui->serverStatusLabel->setStyleSheet("font-size: 12px; padding: 5px; color: #666;");
+                ui->startServerButton->setEnabled(true);
+                ui->stopServerButton->setEnabled(false);
+            });
+    connect(btServer, &BluetoothServer::fileReceived,
+            this, [this](const QString &fileName) {
+                logger->success("Server", QString("✓ Файл получен: %1").arg(fileName));
+            });
+    connect(btServer, &BluetoothServer::transferProgress,
+            this, [this](qint64 bytesReceived, qint64 totalBytes) {
+                if (totalBytes > 0) {
+                    int progress = (bytesReceived * 100) / totalBytes;
+                    ui->progressBar->setValue(progress);
+                }
+            });
+    connect(btServer, &BluetoothServer::transferCompleted,
+            this, [this](const QString &fileName) {
+                logger->success("Server", QString("✓ Передача завершена: %1").arg(fileName));
+                ui->progressBar->setValue(100);
+                QTimer::singleShot(2000, [this]() {
+                    ui->progressBar->setVisible(false);
+                });
+            });
+    connect(btServer, &BluetoothServer::transferFailed,
+            this, [this](const QString &error) {
+                logger->error("Server", QString("Ошибка сервера: %1").arg(error));
+                ui->progressBar->setVisible(false);
+            });
+    
     // Создаем файлсендер (для RFCOMM)
     fileSender = new BluetoothFileSender(logger, this);
     connect(fileSender, &BluetoothFileSender::transferStarted,
@@ -152,6 +195,10 @@ BluetoothWindow::BluetoothWindow(QWidget *parent)
             this, &BluetoothWindow::onDisconnectButtonClicked);
     connect(ui->sendFileButton, &QPushButton::clicked,
             this, &BluetoothWindow::onSendFileButtonClicked);
+    connect(ui->startServerButton, &QPushButton::clicked,
+            this, &BluetoothWindow::onStartServerButtonClicked);
+    connect(ui->stopServerButton, &QPushButton::clicked,
+            this, &BluetoothWindow::onStopServerButtonClicked);
     
     // Подключаем сигнал выбора устройства в таблице
     connect(ui->devicesTable, &QTableWidget::itemSelectionChanged,
@@ -161,6 +208,8 @@ BluetoothWindow::BluetoothWindow(QWidget *parent)
     ui->connectButton->setEnabled(false);
     ui->disconnectButton->setEnabled(false);
     ui->sendFileButton->setEnabled(false);
+    ui->startServerButton->setEnabled(true);
+    ui->stopServerButton->setEnabled(false);
 
     // Логируем информацию о локальном адаптере
     logger->info("Adapter", "═══════════════════════════════════════");
@@ -593,8 +642,16 @@ void BluetoothWindow::onSendFileButtonClicked()
         ui->progressBar->setVisible(true);
         ui->progressBar->setValue(0);
         
-        // Используем OBEX напрямую для телефонов И компьютеров
-        success = obexSender->sendFileViaObex(fileName, device.address, device.name);
+        // Выбираем метод в зависимости от типа устройства
+        if (deviceType == "Компьютер") {
+            // Для компьютеров используем RFCOMM (ПК-ПК передача)
+            logger->info("Send", "Выбран метод: RFCOMM для ПК-ПК передачи");
+            success = obexSender->sendFileViaRfcomm(fileName, device.address, device.name);
+        } else {
+            // Для телефонов используем OBEX
+            logger->info("Send", "Выбран метод: OBEX для телефонов");
+            success = obexSender->sendFileViaObex(fileName, device.address, device.name);
+        }
         
         if (success) {
             logger->success("Send", "");
@@ -611,11 +668,12 @@ void BluetoothWindow::onSendFileButtonClicked()
                 message = QString("✓ Файл успешно отправлен!\n\n"
                         "Файл: %1 (%2 MB)\n"
                         "Устройство: %3 (Компьютер)\n\n"
-                        "Метод: OBEX протокол\n\n"
-                        "На %3 появится окно приема файла.\n"
-                        "Примите файл - он сохранится в папку Bluetooth.\n\n"
-                        "ВНИМАНИЕ: Файл НЕ воспроизведется автоматически.\n"
-                        "Это ограничение Windows.")
+                        "Метод: RFCOMM протокол (ПК-ПК)\n\n"
+                        "На %3 должен быть запущен Bluetooth сервер!\n"
+                        "Файл сохранится в текущую папку как received_file_*.bin\n\n"
+                        "ВАЖНО: Убедитесь что на принимающем ПК:\n"
+                        "1. Запущен Bluetooth сервер\n"
+                        "2. Устройство видимо для других")
                     .arg(fileInfo.fileName())
                     .arg(fileInfo.size() / 1024.0 / 1024.0, 0, 'f', 2)
                     .arg(device.name);
@@ -642,22 +700,63 @@ void BluetoothWindow::onSendFileButtonClicked()
             logger->error("Send", "");
             logger->error("Send", "✗✗✗ ОШИБКА ОТПРАВКИ ЧЕРЕЗ OBEX ✗✗✗");
             logger->error("Send", "");
-            logger->warning("Send", "ВОЗМОЖНЫЕ ПРИЧИНЫ:");
-            logger->warning("Send", "1. Телефон отклонил передачу файла");
-            logger->warning("Send", "2. Телефон не поддерживает OBEX Push");
-            logger->warning("Send", "3. Bluetooth не активен на телефоне");
-            logger->warning("Send", "");
+            if (deviceType == "Компьютер") {
+                logger->warning("Send", "ВОЗМОЖНЫЕ ПРИЧИНЫ (ПК-ПК):");
+                logger->warning("Send", "1. На принимающем ПК не запущен сервер");
+                logger->warning("Send", "2. Устройство не видимо для других");
+                logger->warning("Send", "3. RFCOMM сервис недоступен");
+                logger->warning("Send", "4. Bluetooth драйверы устарели");
+                logger->warning("Send", "");
+                logger->info("Send", "РЕШЕНИЕ: Запустите сервер на принимающем ПК!");
+            } else {
+                logger->warning("Send", "ВОЗМОЖНЫЕ ПРИЧИНЫ (Телефон):");
+                logger->warning("Send", "1. Телефон отклонил передачу файла");
+                logger->warning("Send", "2. Телефон не поддерживает OBEX Push");
+                logger->warning("Send", "3. Bluetooth не активен на телефоне");
+                logger->warning("Send", "");
+            }
             logger->info("Send", "Смотрите детали в send.log и api_calls.log");
             logger->info("Send", "");
             
-            QMessageBox::critical(this, "Ошибка OBEX отправки",
-                QString("Не удалось отправить файл через OBEX.\n\n"
+            QString errorMessage;
+            if (deviceType == "Компьютер") {
+                errorMessage = QString("Не удалось отправить файл на ПК.\n\n"
+                        "Возможные причины:\n"
+                        "• На принимающем ПК не запущен сервер\n"
+                        "• Устройство не видимо для других\n"
+                        "• RFCOMM сервис недоступен\n\n"
+                        "РЕШЕНИЕ: Запустите сервер на принимающем ПК!\n\n"
+                        "Детали в send.log");
+            } else {
+                errorMessage = QString("Не удалось отправить файл на телефон.\n\n"
                         "Возможные причины:\n"
                         "• Вы отклонили файл на телефоне\n"
                         "• Телефон не поддерживает OBEX Push\n"
                         "• Bluetooth выключен на телефоне\n\n"
-                        "Детали в send.log"));
+                        "Детали в send.log");
+            }
+            
+            QMessageBox::critical(this, "Ошибка отправки", errorMessage);
         }
     }
+}
+
+void BluetoothWindow::onStartServerButtonClicked()
+{
+    logger->info("Server", "═══════════════════════════════════════");
+    logger->info("Server", "ЗАПУСК BLUETOOTH СЕРВЕРА");
+    logger->info("Server", "═══════════════════════════════════════");
+    logger->info("Server", "");
+    logger->info("Server", "Сервер будет принимать файлы от других ПК");
+    logger->info("Server", "Порт: 11 (RFCOMM)");
+    logger->info("Server", "");
+    
+    btServer->startServer();
+}
+
+void BluetoothWindow::onStopServerButtonClicked()
+{
+    logger->info("Server", "Остановка Bluetooth сервера...");
+    btServer->stopServer();
 }
 

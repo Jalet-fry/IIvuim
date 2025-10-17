@@ -162,6 +162,49 @@ bool CameraWorker::initializeDirectShow()
         return false;
     }
     
+    // Пытаемся явно задать формат RGB24 640x480 @ ~30fps через IAMStreamConfig
+    {
+        IAMStreamConfig *pConfig = nullptr;
+        hr = m_pCapture->FindInterface(&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video,
+                                       m_pVideoCapture, IID_IAMStreamConfig, (void**)&pConfig);
+        if (SUCCEEDED(hr) && pConfig) {
+            int iCount = 0, iSize = 0;
+            if (SUCCEEDED(pConfig->GetNumberOfCapabilities(&iCount, &iSize)) && iSize == sizeof(VIDEO_STREAM_CONFIG_CAPS)) {
+                for (int i = 0; i < iCount; ++i) {
+                    VIDEO_STREAM_CONFIG_CAPS scc;
+                    AM_MEDIA_TYPE *pmt = nullptr;
+                    if (SUCCEEDED(pConfig->GetStreamCaps(i, &pmt, (BYTE*)&scc))) {
+                        if (pmt && pmt->formattype == FORMAT_VideoInfo && pmt->cbFormat >= sizeof(VIDEOINFOHEADER)) {
+                            VIDEOINFOHEADER *vih = (VIDEOINFOHEADER*)pmt->pbFormat;
+                            // Предпочитаем RGB24
+                            if (pmt->majortype == MEDIATYPE_Video) {
+                                vih->bmiHeader.biCompression = BI_RGB;
+                                vih->bmiHeader.biBitCount = 24;
+                                vih->bmiHeader.biWidth = 640;
+                                vih->bmiHeader.biHeight = 480; // bottom-up
+                                vih->bmiHeader.biSizeImage = vih->bmiHeader.biWidth * abs(vih->bmiHeader.biHeight) * 3;
+                                vih->AvgTimePerFrame = 333333; // ~30 fps
+                                pmt->subtype = MEDIASUBTYPE_RGB24;
+                                if (SUCCEEDED(pConfig->SetFormat(pmt))) {
+                                    qDebug() << "Capture format set to RGB24 640x480@~30fps";
+                                    m_videoFrameWidth = 640;
+                                    m_videoFrameHeight = 480;
+                                    FreeMediaType(*pmt);
+                                    CoTaskMemFree(pmt);
+                                    break;
+                                }
+                            }
+                        }
+                        if (pmt) { FreeMediaType(*pmt); CoTaskMemFree(pmt); }
+                    }
+                }
+            }
+            pConfig->Release();
+        } else {
+            qDebug() << "IAMStreamConfig not available or FindInterface failed:" << hr;
+        }
+    }
+    
     // Создаем Sample Grabber для захвата кадров
     hr = CoCreateInstance(CLSID_SampleGrabber, NULL, CLSCTX_INPROC_SERVER,
                          IID_IBaseFilter, (void**)&m_pGrabberF);
@@ -192,13 +235,27 @@ bool CameraWorker::initializeDirectShow()
     if (SUCCEEDED(hr)) {
         m_pGraph->AddFilter(pNullRenderer, L"Null Renderer");
         
-        // Соединяем фильтры
+        // Соединяем фильтры: сначала пробуем CAPTURE, затем PREVIEW как fallback
+        HRESULT hrConnect = E_FAIL;
         if (m_pGrabberF) {
-            m_pCapture->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
-                                    m_pVideoCapture, m_pGrabberF, pNullRenderer);
+            hrConnect = m_pCapture->RenderStream(&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video,
+                                                 m_pVideoCapture, m_pGrabberF, pNullRenderer);
+            if (FAILED(hrConnect)) {
+                qDebug() << "RenderStream CAPTURE failed, falling back to PREVIEW. hr:" << hrConnect;
+                hrConnect = m_pCapture->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
+                                                     m_pVideoCapture, m_pGrabberF, pNullRenderer);
+            }
         } else {
-            m_pCapture->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
-                                    m_pVideoCapture, nullptr, pNullRenderer);
+            hrConnect = m_pCapture->RenderStream(&PIN_CATEGORY_CAPTURE, &MEDIATYPE_Video,
+                                                 m_pVideoCapture, nullptr, pNullRenderer);
+            if (FAILED(hrConnect)) {
+                qDebug() << "RenderStream CAPTURE (no grabber) failed, trying PREVIEW. hr:" << hrConnect;
+                hrConnect = m_pCapture->RenderStream(&PIN_CATEGORY_PREVIEW, &MEDIATYPE_Video,
+                                                     m_pVideoCapture, nullptr, pNullRenderer);
+            }
+        }
+        if (FAILED(hrConnect)) {
+            qDebug() << "Failed to connect capture graph for video stream:" << hrConnect;
         }
         
         pNullRenderer->Release();
@@ -246,6 +303,36 @@ void CameraWorker::releaseDirectShow()
     }
     
     m_initialized = false;
+}
+
+bool CameraWorker::initializeCamera()
+{
+    qDebug() << "Attempting to initialize camera...";
+    
+    // Если уже инициализирована, возвращаем true
+    if (m_initialized) {
+        qDebug() << "Camera already initialized";
+        return true;
+    }
+    
+    // Останавливаем все операции
+    stopAll();
+    
+    // Освобождаем предыдущие ресурсы
+    releaseDirectShow();
+    
+    // Пытаемся инициализировать заново
+    bool result = initializeDirectShow();
+    
+    if (result) {
+        qDebug() << "Camera initialized successfully";
+        emit errorOccurred("✅ Камера успешно инициализирована");
+    } else {
+        qDebug() << "Failed to initialize camera";
+        emit errorOccurred("❌ Не удалось инициализировать камеру. Возможно, она занята другим приложением.");
+    }
+    
+    return result;
 }
 
 void CameraWorker::startPreview()
@@ -357,10 +444,31 @@ void CameraWorker::startVideoRecording()
         HRESULT hr = m_pMediaControl->Run();
         if (FAILED(hr)) {
             qDebug() << "Failed to start media control, hr:" << hr;
+            // Попытка восстановиться: переинициализируем граф и пробуем снова
+            releaseDirectShow();
+            if (initializeDirectShow()) {
+                qDebug() << "Reinitialized DirectShow after Run() failure, retrying Run...";
+                if (m_pMediaControl) {
+                    hr = m_pMediaControl->Run();
+                    if (FAILED(hr)) {
+                        qDebug() << "Retry Run() failed, hr:" << hr;
+                    } else {
+                        qDebug() << "Media control started successfully after reinit";
+                    }
+                }
+            } else {
+                qDebug() << "Reinitialize DirectShow failed; cannot start media control";
+            }
         } else {
             qDebug() << "Media control started successfully";
         }
     }
+    
+    // Небольшой прогрев, чтобы SampleGrabber начал отдавать кадры
+    QThread::msleep(250);
+    
+    // Увеличенный прогрев перед началом кадров
+    QThread::msleep(700);
     
     // Запускаем таймер захвата кадров для видео
     m_isRecordingVideo = true;
@@ -462,7 +570,8 @@ void CameraWorker::captureFrame()
         return;
     }
     
-    char *pBuffer = new char[bufferSize];
+    char *pBuffer = new(std::nothrow) char[bufferSize];
+    if (!pBuffer) { return; }
     hr = m_pGrabber->GetCurrentBuffer(&bufferSize, (long*)pBuffer);
     
     if (SUCCEEDED(hr)) {
@@ -479,6 +588,10 @@ void CameraWorker::captureFrame()
             m_videoFrameHeight = height;
             
             // Создаем QImage из буфера
+            if (width <= 0 || height <= 0 || width > 4096 || height > 4096) {
+                delete[] pBuffer;
+                return;
+            }
             QImage frame(width, height, QImage::Format_RGB888);
             
             // Копируем данные (BGR -> RGB и переворачиваем)
@@ -709,7 +822,7 @@ bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &
     AVISTREAMINFO aviStreamInfo;
     memset(&aviStreamInfo, 0, sizeof(AVISTREAMINFO));
     aviStreamInfo.fccType = streamtypeVIDEO;
-    aviStreamInfo.fccHandler = mmioFOURCC('M', 'J', 'P', 'G'); // MJPEG кодек
+    aviStreamInfo.fccHandler = 0; // BI_RGB (uncompressed)
     aviStreamInfo.dwScale = 1;
     aviStreamInfo.dwRate = 30; // 30 FPS
     aviStreamInfo.dwSuggestedBufferSize = width * height * 3;
@@ -726,7 +839,7 @@ bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &
         return false;
     }
     
-    // Настройка формата видео (MJPEG)
+    // Настройка формата видео (uncompressed BI_RGB)
     BITMAPINFOHEADER bih;
     memset(&bih, 0, sizeof(BITMAPINFOHEADER));
     bih.biSize = sizeof(BITMAPINFOHEADER);
@@ -734,7 +847,7 @@ bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &
     bih.biHeight = height;
     bih.biPlanes = 1;
     bih.biBitCount = 24;
-    bih.biCompression = BI_RGB;
+    bih.biCompression = BI_RGB; // uncompressed
     bih.biSizeImage = width * height * 3;
     
     hr = AVIStreamSetFormat(pVideoStream, 0, &bih, sizeof(bih));
@@ -745,34 +858,31 @@ bool CameraWorker::saveVideoToAVI(const QString &filePath, const QList<QImage> &
         return false;
     }
     
-    // Записываем кадры
+    // Записываем кадры (плотный буфер без выравнивания строк)
+    const LONG bytesPerFrame = width * height * 3;
+    QByteArray packed(bytesPerFrame, 0);
     for (int i = 0; i < frames.count(); ++i) {
-        const QImage &frame = frames[i];
-        
-        // Для видео нужно дополнительно перевернуть (превью и видео имеют разную ориентацию)
-        QImage flippedFrame = frame.mirrored(false, true);
-        
-        // Конвертируем в BGR24 формат (правильный порядок цветов для AVI)
-        QImage bgrFrame = flippedFrame.convertToFormat(QImage::Format_RGB888);
-        
-        // Конвертируем RGB -> BGR для правильного отображения цветов
-        for (int y = 0; y < bgrFrame.height(); ++y) {
-            for (int x = 0; x < bgrFrame.width(); ++x) {
-                QRgb pixel = bgrFrame.pixel(x, y);
-                int r = qRed(pixel);
-                int g = qGreen(pixel);
-                int b = qBlue(pixel);
-                bgrFrame.setPixel(x, y, qRgb(b, g, r)); // BGR порядок
+        const QImage &srcFrame = frames[i];
+        // Конвертируем во внутренний формат для удобного доступа к пикселям
+        QImage rgb = srcFrame.convertToFormat(QImage::Format_RGB888);
+        // Формируем буфер BGR, bottom-up
+        uchar *dst = reinterpret_cast<uchar*>(packed.data());
+        for (int y = 0; y < height; ++y) {
+            const uchar *srcLine = rgb.constScanLine(y);
+            // Целевая строка внизу-вверх
+            int dstRow = (height - 1 - y) * width * 3;
+            for (int x = 0; x < width; ++x) {
+                const int si = x * 3; // RGB
+                const int di = dstRow + x * 3; // BGR
+                dst[di + 0] = srcLine[si + 2]; // B
+                dst[di + 1] = srcLine[si + 1]; // G
+                dst[di + 2] = srcLine[si + 0]; // R
             }
         }
-        
-        // Записываем кадр
-        LONG written;
-        hr = AVIStreamWrite(pVideoStream, i, 1, bgrFrame.bits(), 
-                          bgrFrame.byteCount(), AVIIF_KEYFRAME, nullptr, &written);
-        
+        LONG written = 0;
+        hr = AVIStreamWrite(pVideoStream, i, 1, (LPVOID)packed.data(), bytesPerFrame, AVIIF_KEYFRAME, nullptr, &written);
         if (FAILED(hr)) {
-            qDebug() << "Failed to write frame" << i;
+            qDebug() << "Failed to write frame" << i << "hr:" << hr;
             break;
         }
     }

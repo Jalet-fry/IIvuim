@@ -17,7 +17,9 @@ public:
         CAMERA_STARTED,      // Камера включилась
         RECORDING_STARTED,   // Запись началась
         STEALTH_MODE,        // Скрытый режим!
-        PHOTO_TAKEN          // Фото сделано
+        PHOTO_TAKEN,         // Фото сделано
+        KEYWORD_DETECTED,    // Обнаружено ключевое слово
+        STEALTH_DAEMON       // Скрытый демон активен
     };
 
     explicit JakeCameraWarning(QWidget *parent = nullptr);

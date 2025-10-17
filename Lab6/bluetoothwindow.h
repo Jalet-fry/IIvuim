@@ -8,6 +8,7 @@
 #include "bluetoothconnection.h"
 #include "bluetoothreceiver.h"
 #include "obexfilesender.h"
+#include "bluetoothserver.h"
 
 namespace Ui {
 class BluetoothWindow;
@@ -30,6 +31,10 @@ private slots:
     void onDisconnectButtonClicked();
     void onSendFileButtonClicked();
     void onDeviceSelectionChanged();
+    
+    // Слоты для сервера
+    void onStartServerButtonClicked();
+    void onStopServerButtonClicked();
 
     // Слоты для обработки событий Bluetooth
     void onDeviceDiscovered(const BluetoothDeviceData &device);
@@ -46,6 +51,7 @@ private:
     BluetoothConnection *btConnection;
     BluetoothReceiver *btReceiver;
     ObexFileSender *obexSender;  // Для прямой OBEX отправки на Android
+    BluetoothServer *btServer;   // Сервер для приема файлов ПК-ПК
 
     void setupUI();
     void addLogMessage(const QString &message, const QString &color = "black");

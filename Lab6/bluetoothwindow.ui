@@ -40,6 +40,16 @@
       </widget>
      </item>
      <item>
+      <widget class="QLabel" name="serverStatusLabel">
+       <property name="text">
+        <string>Сервер: Остановлен</string>
+       </property>
+       <property name="styleSheet">
+        <string>font-size: 12px; padding: 5px; color: #666;</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <spacer name="horizontalSpacer">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
@@ -164,6 +174,32 @@ QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }</str
            <string>QPushButton { background-color: #FF9800; color: white; border: none; border-radius: 5px; padding: 8px 20px; font-size: 12px; }
 QPushButton:hover { background-color: #F57C00; }
 QPushButton:pressed { background-color: #E65100; }
+QPushButton:disabled { background-color: #BDBDBD; }</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="startServerButton">
+          <property name="text">
+           <string>Запустить сервер</string>
+          </property>
+          <property name="styleSheet">
+           <string>QPushButton { background-color: #9C27B0; color: white; border: none; border-radius: 5px; padding: 8px 20px; font-size: 12px; }
+QPushButton:hover { background-color: #7B1FA2; }
+QPushButton:pressed { background-color: #4A148C; }
+QPushButton:disabled { background-color: #BDBDBD; }</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="stopServerButton">
+          <property name="text">
+           <string>Остановить сервер</string>
+          </property>
+          <property name="styleSheet">
+           <string>QPushButton { background-color: #795548; color: white; border: none; border-radius: 5px; padding: 8px 20px; font-size: 12px; }
+QPushButton:hover { background-color: #5D4037; }
+QPushButton:pressed { background-color: #3E2723; }
 QPushButton:disabled { background-color: #BDBDBD; }</string>
           </property>
          </widget>

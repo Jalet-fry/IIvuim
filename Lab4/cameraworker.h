@@ -39,6 +39,12 @@ public:
     
     // Проверка инициализации
     bool isInitialized() const { return m_initialized; }
+    
+    // Принудительная инициализация камеры
+    bool initializeCamera();
+
+    // Текущий путь видеофайла (как в обычном режиме)
+    QString getCurrentVideoPath() const { return m_currentVideoPath; }
 
 signals:
     void frameReady(const QImage &frame);
