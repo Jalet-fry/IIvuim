@@ -1,7 +1,6 @@
 #include "camerawindow.h"
 #include "cameraworker.h"
 #include "jakecamerawarning.h"
-#include "stealthdaemon.h"
 #include "lab4_logger.h"
 #include <QMessageBox>
 #include <QGroupBox>
@@ -19,12 +18,10 @@
 CameraWindow::CameraWindow(QWidget *parent)
     : QWidget(parent),
       cameraWorker(nullptr),
-      stealthDaemonThread(nullptr),
       isRecording(false),
       isPreviewEnabled(true),
       recordingIndicatorVisible(false),
-      globalHotkeysRegistered(false),
-      isStealthDaemonRunning(false)
+      globalHotkeysRegistered(false)
 {
     setWindowTitle("ЛР 4: Работа с веб-камерой (DirectShow API)");
     resize(1000, 700);
@@ -42,9 +39,6 @@ CameraWindow::CameraWindow(QWidget *parent)
     jakeWarning = new JakeCameraWarning(this);
     Lab4Logger::instance()->logJakeEvent("JakeCameraWarning created");
     
-    // Создаем скрытый демон
-    stealthDaemonThread = new StealthDaemonThread(this);
-    Lab4Logger::instance()->logStealthDaemonEvent("StealthDaemonThread created");
     
     // Создаем автоматический режим
     
@@ -56,34 +50,6 @@ CameraWindow::CameraWindow(QWidget *parent)
     connect(cameraWorker, &CameraWorker::cameraInfoReady, this, &CameraWindow::onCameraInfoReady);
     connect(cameraWorker, &CameraWorker::frameReady, this, &CameraWindow::onFrameReady);
     
-    // Подключаем сигналы скрытого демона, когда он будет создан внутри потока
-    auto tryAttachDaemonSignals = [this]() {
-        if (!stealthDaemonThread) return;
-        StealthDaemon *daemon = stealthDaemonThread->getDaemon();
-        if (!daemon) return;
-        static bool attached = false;
-        if (attached) return;
-        attached = true;
-        connect(daemon, &StealthDaemon::daemonStarted, this, &CameraWindow::onDaemonStarted);
-        connect(daemon, &StealthDaemon::daemonStopped, this, &CameraWindow::onDaemonStopped);
-        connect(daemon, &StealthDaemon::keywordDetected, this, &CameraWindow::onKeywordDetected);
-        connect(daemon, &StealthDaemon::photoTaken, this, &CameraWindow::onStealthPhotoTaken);
-        connect(daemon, &StealthDaemon::videoRecorded, this, &CameraWindow::onStealthVideoRecorded);
-        connect(daemon, &StealthDaemon::logMessage, this, &CameraWindow::onDaemonLogMessage);
-        qDebug() << "Attached to StealthDaemon signals";
-    };
-    
-    // Периодически пробуем подключиться (демон создается в run())
-    QTimer *daemonAttachTimer = new QTimer(this);
-    daemonAttachTimer->setInterval(200);
-    connect(daemonAttachTimer, &QTimer::timeout, this, [=]() {
-        tryAttachDaemonSignals();
-        if (stealthDaemonThread && stealthDaemonThread->getDaemon()) {
-            daemonAttachTimer->stop();
-            daemonAttachTimer->deleteLater();
-        }
-    });
-    daemonAttachTimer->start();
     
     // Подключаем сигналы автоматического режима
     
@@ -136,25 +102,6 @@ CameraWindow::~CameraWindow()
         cameraWorker = nullptr;
     }
     
-    // Останавливаем скрытый демон только если он не должен продолжать работать
-    if (stealthDaemonThread) {
-        if (isStealthDaemonRunning) {
-            qDebug() << "Daemon should continue running, not stopping...";
-            // Отключаем демон от родительского процесса
-            stealthDaemonThread->setParent(nullptr);
-            stealthDaemonThread->moveToThread(nullptr);
-            stealthDaemonThread = nullptr; // Не удаляем, пусть работает
-        } else {
-            qDebug() << "Stopping stealth daemon...";
-            if (stealthDaemonThread->getDaemon()) {
-                stealthDaemonThread->getDaemon()->stopDaemon();
-            }
-            stealthDaemonThread->quit();
-            stealthDaemonThread->wait(3000); // Ждем до 3 секунд
-            delete stealthDaemonThread;
-            stealthDaemonThread = nullptr;
-        }
-    }
     
     // Останавливаем автоматический режим
     
@@ -185,19 +132,6 @@ void CameraWindow::closeEvent(QCloseEvent *event)
     // Отменяем глобальные горячие клавиши
     unregisterGlobalHotkeys();
     
-    // Если демон был активен, запускаем его как отдельный процесс
-    if (isStealthDaemonRunning) {
-        qDebug() << "Stealth daemon was running, starting as separate process...";
-        Lab4Logger::instance()->logStealthDaemonEvent("Main application closing, starting daemon as separate process");
-        
-        if (startDaemonAsSeparateProcess()) {
-            Lab4Logger::instance()->logStealthDaemonEvent("Daemon started as separate process successfully");
-            qDebug() << "Daemon started as separate process";
-        } else {
-            Lab4Logger::instance()->logError(Lab4Logger::STEALTH_DAEMON, "Failed to start daemon as separate process");
-            qDebug() << "Failed to start daemon as separate process";
-        }
-    }
     
     qDebug() << "CameraWindow closing properly";
     
@@ -308,69 +242,6 @@ void CameraWindow::setupUI()
     
     controlLayout->addWidget(controlGroup);
     
-    // Режим невидимости
-    QGroupBox *stealthGroup = new QGroupBox("🕵️ Скрытый режим");
-    QVBoxLayout *stealthLayout = new QVBoxLayout(stealthGroup);
-    
-    // Кнопки управления скрытым демоном
-    QPushButton *startDaemonBtn = new QPushButton("🚀 Запустить скрытый демон");
-    startDaemonBtn->setStyleSheet(
-        "QPushButton { background-color: #E91E63; color: white; padding: 8px; border-radius: 4px; font-weight: bold; }"
-        "QPushButton:hover { background-color: #C2185B; }"
-        "QPushButton:disabled { background-color: #666; }"
-    );
-    connect(startDaemonBtn, &QPushButton::clicked, this, &CameraWindow::onStartStealthDaemon);
-    stealthLayout->addWidget(startDaemonBtn);
-    
-    QPushButton *stopDaemonBtn = new QPushButton("⏹ Остановить скрытый демон");
-    stopDaemonBtn->setStyleSheet(
-        "QPushButton { background-color: #795548; color: white; padding: 8px; border-radius: 4px; font-weight: bold; }"
-        "QPushButton:hover { background-color: #5D4037; }"
-        "QPushButton:disabled { background-color: #666; }"
-    );
-    connect(stopDaemonBtn, &QPushButton::clicked, this, &CameraWindow::onStopStealthDaemon);
-    stealthLayout->addWidget(stopDaemonBtn);
-    
-    QPushButton *hideWindowBtn = new QPushButton("Скрыть окно (скрытый режим)");
-    hideWindowBtn->setStyleSheet(
-        "QPushButton { background-color: #9C27B0; color: white; padding: 8px; border-radius: 4px; font-weight: bold; }"
-        "QPushButton:hover { background-color: #7B1FA2; }"
-    );
-    connect(hideWindowBtn, &QPushButton::clicked, this, [this]() {
-        QMessageBox::information(this, "Скрытый режим",
-            "Окно будет скрыто.\n"
-            "Камера продолжит работать.\n\n"
-            "🔥 ГЛОБАЛЬНЫЕ ГОРЯЧИЕ КЛАВИШИ:\n"
-            "• Ctrl+Shift+R - НАЧАТЬ запись видео\n"
-            "• Ctrl+Shift+S - ОСТАНОВИТЬ запись видео\n"
-            "• Ctrl+Shift+P - Сделать фото\n"
-            "• Ctrl+Shift+Q - Показать окно (+ автостоп записи)\n\n"
-            "Работают ВЕЗДЕ в Windows!\n\n"
-            "Для принудительного выхода используйте\n"
-            "диспетчер задач (Ctrl+Shift+Esc)");
-        
-        // Регистрируем глобальные горячие клавиши при скрытии
-        registerGlobalHotkeys();
-        
-        // Jake предупреждает о скрытом режиме!
-        jakeWarning->showWarning(JakeCameraWarning::STEALTH_MODE);
-        
-        this->hide();
-    });
-    stealthLayout->addWidget(hideWindowBtn);
-    
-    QLabel *stealthInfo = new QLabel(
-        "⚠️ Скрытый демон:\n"
-        "• Отслеживает нажатия клавиш\n"
-        "• Записывает видео при ключевых словах\n"
-        "• Работает в отдельном процессе\n"
-        "• Логирует активность в файл"
-    );
-    stealthInfo->setStyleSheet("QLabel { color: #666; font-size: 11px; padding: 5px; }");
-    stealthInfo->setWordWrap(true);
-    stealthLayout->addWidget(stealthInfo);
-    
-    controlLayout->addWidget(stealthGroup);
     
     // Автоматический режим (ваш вариант)
     
@@ -579,68 +450,6 @@ void CameraWindow::unregisterGlobalHotkeys()
     globalHotkeysRegistered = false;
 }
 
-bool CameraWindow::startDaemonAsSeparateProcess()
-{
-    qDebug() << "Starting daemon as separate process...";
-    
-    // ЗАПУСКАЕМ НАСТОЯЩИЙ ОТДЕЛЬНЫЙ ПРОЦЕСС ДЕМОНА
-    QString daemonExePath = QString::fromLatin1("C:/QT_projects/IIvuim/release/stealth_daemon.exe");
-    
-    // Проверяем наличие exe файла
-    if (!QFile::exists(daemonExePath)) {
-        qDebug() << "Stealth daemon executable not found:" << daemonExePath;
-        Lab4Logger::instance()->logError(Lab4Logger::STEALTH_DAEMON, 
-            QString("Stealth daemon executable not found: %1").arg(daemonExePath));
-        
-        // Показываем пользователю сообщение
-        QMessageBox::warning(this, "Демон не найден", 
-            QString("Исполняемый файл демона не найден:\n%1\n\n"
-                   "Для создания демона:\n"
-                   "1. Запустите скрипт build_daemon.ps1\n"
-                   "2. Или соберите проект stealth_daemon.pro").arg(daemonExePath));
-        return false;
-    }
-    
-    // Проверяем, не запущен ли уже демон
-    QString documentsPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
-    QString markerPath = documentsPath + "/Lab4_StealthLogs/daemon_running.txt";
-    
-    if (QFile::exists(markerPath)) {
-        qDebug() << "Stealth daemon already running (marker file exists)";
-        Lab4Logger::instance()->logStealthDaemonEvent("Stealth daemon already running (marker file exists)");
-        QMessageBox::information(this, "Демон уже запущен", 
-            "Скрытый демон уже работает в фоновом режиме.\n"
-            "Проверьте файл daemon_running.txt в папке логов.");
-        return true;
-    }
-    
-    // Запускаем демон как отдельный процесс
-    const QString workingDir = QFileInfo(daemonExePath).absolutePath();
-    bool started = QProcess::startDetached(daemonExePath, QStringList(), workingDir);
-    
-    if (started) {
-        qDebug() << "✅ Stealth daemon started as separate process successfully";
-        Lab4Logger::instance()->logStealthDaemonEvent("Stealth daemon started as separate process successfully");
-        
-        // Ждем немного и проверяем, что демон действительно запустился
-        QThread::msleep(1000);
-        if (QFile::exists(markerPath)) {
-            QMessageBox::information(this, "Демон запущен", 
-                "✅ Скрытый демон успешно запущен в фоновом режиме!\n\n"
-                "Демон будет работать независимо от основного приложения.\n"
-                "Для остановки используйте диспетчер задач.");
-        }
-        return true;
-    } else {
-        qDebug() << "❌ Failed to start stealth daemon as separate process";
-        Lab4Logger::instance()->logError(Lab4Logger::STEALTH_DAEMON, 
-            "Failed to start stealth daemon as separate process");
-        QMessageBox::critical(this, "Ошибка запуска демона", 
-            "❌ Не удалось запустить скрытый демон как отдельный процесс.\n"
-            "Проверьте права доступа и наличие файла stealth_daemon.exe");
-        return false;
-    }
-}
 
 bool CameraWindow::nativeEvent(const QByteArray &eventType, void *message, long *result)
 {
@@ -713,142 +522,13 @@ bool CameraWindow::nativeEvent(const QByteArray &eventType, void *message, long 
     return QWidget::nativeEvent(eventType, message, result);
 }
 
-// Методы для управления скрытым демоном
-void CameraWindow::onStartStealthDaemon()
-{
-    Lab4Logger::instance()->logStealthDaemonEvent("User clicked 'Start Stealth Daemon' button");
-    
-    if (isStealthDaemonRunning) {
-        Lab4Logger::instance()->logWarning(Lab4Logger::STEALTH_DAEMON, "Attempted to start already running daemon");
-        QMessageBox::information(this, "Скрытый демон", "Демон уже запущен!");
-        return;
-    }
-    
-    if (!stealthDaemonThread) {
-        Lab4Logger::instance()->logError(Lab4Logger::STEALTH_DAEMON, "Stealth daemon thread missing");
-        QMessageBox::critical(this, "Ошибка", "Поток скрытого демона отсутствует!");
-        return;
-    }
-    
-    // Настраиваем параметры потока демона ДО старта (демон создается в run())
-    QStringList keywords;
-    keywords << "сэкс" << "порно" << "секс" << "porn" << "sex" << "xxx" << "nude" << "naked" 
-             << "голый" << "голая" << "обнаженный" << "обнаженная";
-    stealthDaemonThread->setKeywords(keywords);
-    stealthDaemonThread->setPhotoInterval(30);
-    stealthDaemonThread->setVideoDuration(10);
-    stealthDaemonThread->setLoggingEnabled(true);
-    
-    // Запускаем поток демона (в run() создастся StealthDaemon и запустится)
-    stealthDaemonThread->start();
-    
-    statusLabel->setText("Статус: 🚀 Скрытый демон запускается...");
-    
-    QMessageBox::information(this, "Скрытый демон", 
-        "🕵️ Скрытый демон запущен!\n\n"
-        "Функции:\n"
-        "• Отслеживание нажатий клавиш\n"
-        "• Автоматическое видеонаблюдение при ключевых словах\n"
-        "• Периодические видео каждые 30 секунд (10 сек запись)\n"
-        "• Логирование в файл\n\n"
-        "Ключевые слова: сэкс, порно, sex, porn, xxx, nude, naked\n\n"
-        "⚠️ ВНИМАНИЕ: Используйте только в образовательных целях!");
-}
 
-void CameraWindow::onStopStealthDaemon()
-{
-    if (!isStealthDaemonRunning) {
-        QMessageBox::information(this, "Скрытый демон", "Демон не запущен!");
-        return;
-    }
-    
-    if (!stealthDaemonThread) {
-        return;
-    }
-    
-    // Останавливаем демона, если уже создан
-    if (stealthDaemonThread->getDaemon()) {
-        stealthDaemonThread->getDaemon()->stopDaemon();
-    }
-    
-    // Останавливаем поток
-    stealthDaemonThread->quit();
-    stealthDaemonThread->wait(3000);
-    
-    statusLabel->setText("Статус: ⏹ Скрытый демон остановлен");
-    
-    QMessageBox::information(this, "Скрытый демон", "Скрытый демон остановлен!");
-}
 
-void CameraWindow::onDaemonStarted()
-{
-    isStealthDaemonRunning = true;
-    statusLabel->setText("Статус: 🕵️ Скрытый демон активен");
-    
-    // Jake предупреждает о запуске демона!
-    jakeWarning->showWarning(JakeCameraWarning::STEALTH_DAEMON);
-    
-    qDebug() << "Stealth daemon started successfully";
-}
 
-void CameraWindow::onDaemonStopped()
-{
-    isStealthDaemonRunning = false;
-    statusLabel->setText("Статус: ⏹ Скрытый демон остановлен");
-    
-    // Скрываем Jake
-    jakeWarning->hideWarning();
-    
-    qDebug() << "Stealth daemon stopped";
-}
 
-void CameraWindow::onKeywordDetected(const QString &keyword)
-{
-    statusLabel->setText(QString("Статус: 🔍 Обнаружено ключевое слово: '%1'").arg(keyword));
-    
-    // Jake предупреждает о обнаружении ключевого слова!
-    jakeWarning->showWarning(JakeCameraWarning::KEYWORD_DETECTED);
-    
-    qDebug() << "Keyword detected:" << keyword;
-}
 
-void CameraWindow::onStealthPhotoTaken(const QString &path)
-{
-    statusLabel->setText(QString("Статус: 📸 Скрытое фото: %1").arg(path));
-    
-    // Jake подмигивает при скрытом фото!
-    jakeWarning->showWarning(JakeCameraWarning::PHOTO_TAKEN);
-    
-    qDebug() << "Stealth photo taken:" << path;
-}
 
-void CameraWindow::onStealthVideoRecorded(const QString &path)
-{
-    statusLabel->setText(QString("Статус: 🎥 Скрытое видео: %1").arg(path));
-    
-    // Jake предупреждает о скрытом видео!
-    jakeWarning->showWarning(JakeCameraWarning::RECORDING_STARTED);
-    
-    qDebug() << "Stealth video recorded:" << path;
-}
 
-void CameraWindow::onDaemonLogMessage(const QString &message)
-{
-    // Добавляем сообщение в статус (можно также в отдельное окно логов)
-    qDebug() << "Daemon log:" << message;
-    
-    // Обновляем статус с последним сообщением
-    if (message.contains("KEYWORD DETECTED")) {
-        // Уже обработано в onKeywordDetected
-        return;
-    }
-    
-    // Показываем важные сообщения в статусе
-    if (message.contains("started") || message.contains("stopped")) {
-        // Уже обработано в соответствующих методах
-        return;
-    }
-}
 
 
 
