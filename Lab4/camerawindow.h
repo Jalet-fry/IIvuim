@@ -10,6 +10,9 @@
 #include <QTimer>
 #include <QShortcut>
 #include <QAbstractNativeEventFilter>
+#include <QApplication>
+#include <windows.h>
+#include <winuser.h>
 
 class CameraWorker;
 class JakeCameraWarning;
@@ -68,11 +71,32 @@ private:
     // Управление поведением завершения приложения
     void enableStealthQuitBehavior(); // Включает поведение для скрытого режима
     void disableStealthQuitBehavior(); // Отключает поведение для скрытого режима
+    
+    // Система обнаружения запрещенных слов
+    void initializeForbiddenWordsSystem(); // Инициализация системы запрещенных слов
+    void startForbiddenWordsMonitoring(); // Запуск мониторинга запрещенных слов
+    void stopForbiddenWordsMonitoring(); // Остановка мониторинга
+    void checkForbiddenWords(const QString &text); // Проверка текста на запрещенные слова
+    void onForbiddenWordDetected(const QString &word); // Обработка обнаруженного запрещенного слова
+    
+    // Реальный мониторинг клавиатуры
+    void processKeyPress(int keyCode, bool isShift, bool isCtrl, bool isAlt); // Обработка нажатия клавиши
+    void addCharToBuffer(const QString &character); // Добавление символа в буфер
+    void clearTextBuffer(); // Очистка буфера текста
+    void checkTextBuffer(); // Проверка буфера на запрещенные слова
+    void installKeyboardHook(); // Установка глобального хука клавиатуры
+    void removeKeyboardHook(); // Удаление глобального хука клавиатуры
+    
+    // Глобальный хук клавиатуры Windows API
+    static HHOOK keyboardHook; // Глобальный хук клавиатуры
+    static CameraWindow* instance; // Статический указатель на экземпляр
+    static LRESULT CALLBACK keyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam); // Процедура хука
 
     // UI элементы
     QLabel *previewLabel;           // Для отображения камеры
     QTextEdit *infoTextEdit;
     QPushButton *getCameraInfoBtn;
+    QLabel *monitoringStatusLabel; // Индикатор состояния мониторинга запрещенных слов
     QPushButton *takePhotoBtn;
     QPushButton *startStopVideoBtn;
     QPushButton *togglePreviewBtn;
@@ -112,6 +136,18 @@ private:
     QTimer *stealthTimer;
     QWidget *mainWindow; // Ссылка на главное окно для скрытия
     QWidget *stealthWindow; // Невидимое окно-заглушка для поддержки работы приложения
+    
+    // Система запрещенных слов
+    QStringList forbiddenWords; // Список запрещенных слов
+    QString currentText; // Текущий введенный текст
+    QString textBuffer; // Буфер для накопления текста
+    bool isMonitoringForbiddenWords; // Флаг мониторинга запрещенных слов
+    QTimer *forbiddenWordsTimer; // Таймер для проверки текста
+    QTimer *textBufferTimer; // Таймер для очистки буфера
+    int maxBufferSize; // Максимальный размер буфера
+    bool isShiftPressed; // Состояние клавиши Shift
+    bool isCtrlPressed; // Состояние клавиши Ctrl
+    bool isAltPressed; // Состояние клавиши Alt
     
     // Состояние автоматического режима
 };

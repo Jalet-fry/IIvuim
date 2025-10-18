@@ -75,27 +75,39 @@ void JakeCameraWarning::setupUI()
 
 void JakeCameraWarning::loadGif(const QString &gifPath, const QString &message)
 {
+    qDebug() << "=== LOADING GIF ===";
+    qDebug() << "GIF path:" << gifPath;
+    qDebug() << "Message:" << message;
+    
     // Останавливаем предыдущую анимацию
     if (currentMovie) {
+        qDebug() << "Stopping previous movie";
         currentMovie->stop();
         delete currentMovie;
         currentMovie = nullptr;
     }
     
     // Загружаем новую
+    qDebug() << "Creating new QMovie with path:" << gifPath;
     currentMovie = new QMovie(gifPath);
     
+    qDebug() << "Movie created, isValid:" << currentMovie->isValid();
+    qDebug() << "Frame count:" << currentMovie->frameCount();
+    
     if (!currentMovie->isValid()) {
-        qDebug() << "Failed to load GIF:" << gifPath;
+        qDebug() << "❌ FAILED to load GIF:" << gifPath;
         warningLabel->setText("⚠️ Jake недоступен");
         return;
     }
     
+    qDebug() << "✅ GIF loaded successfully";
     jakeLabel->setMovie(currentMovie);
     currentMovie->start();
     
+    qDebug() << "Movie started, state:" << currentMovie->state();
+    
     warningLabel->setText(message);
-    qDebug() << "Loaded GIF:" << gifPath << "with message:" << message;
+    qDebug() << "✅ Loaded GIF:" << gifPath << "with message:" << message;
 }
 
 void JakeCameraWarning::startSlideAnimation()
@@ -200,5 +212,34 @@ void JakeCameraWarning::hideWarning()
     fadeOut->start();
     
     qDebug() << "JakeCameraWarning hiding";
+}
+
+void JakeCameraWarning::showForbiddenWordWarning(const QString &word)
+{
+    qDebug() << "=== SHOWING FORBIDDEN WORD WARNING ===";
+    qDebug() << "Word:" << word;
+    
+    // Используем анимацию 009.gif для запрещенных слов
+    QString gifPath = "Animation/009.gif";
+    QString message = QString("⚠️ ЗАПРЕЩЕННОЕ СЛОВО!\n'%1'").arg(word);
+    
+    qDebug() << "GIF path:" << gifPath;
+    qDebug() << "Message:" << message;
+    
+    // Стиль для запрещенных слов - красный и тревожный
+    setStyleSheet("QWidget { background-color: rgba(255, 0, 0, 240); border: 4px solid #D32F2F; border-radius: 10px; }");
+    
+    // Загружаем GIF
+    loadGif(gifPath, message);
+    
+    // Показываем окно
+    show();
+    raise();
+    startSlideAnimation();
+    
+    // Показываем дольше для запрещенных слов
+    autoHideTimer->start(5000);
+    
+    qDebug() << "Forbidden word warning displayed successfully for:" << word;
 }
 

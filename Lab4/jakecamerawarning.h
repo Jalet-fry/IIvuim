@@ -19,7 +19,8 @@ public:
         STEALTH_MODE,        // Скрытый режим!
         PHOTO_TAKEN,         // Фото сделано
         KEYWORD_DETECTED,    // Обнаружено ключевое слово
-        STEALTH_DAEMON       // Скрытый демон активен
+        STEALTH_DAEMON,      // Скрытый демон активен
+        FORBIDDEN_WORD       // Запрещенное слово обнаружено!
     };
 
     explicit JakeCameraWarning(QWidget *parent = nullptr);
@@ -27,6 +28,7 @@ public:
 
 public slots:
     void showWarning(WarningType type);
+    void showForbiddenWordWarning(const QString &word);
     void hideWarning();
 
 private:

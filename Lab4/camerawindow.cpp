@@ -17,6 +17,10 @@
 #include <QRadioButton>
 #include <windows.h>
 
+// Инициализация статических переменных
+HHOOK CameraWindow::keyboardHook = nullptr;
+CameraWindow* CameraWindow::instance = nullptr;
+
 CameraWindow::CameraWindow(QWidget *parent, QWidget *mainWin)
     : QWidget(parent),
       cameraWorker(nullptr),
@@ -35,6 +39,9 @@ CameraWindow::CameraWindow(QWidget *parent, QWidget *mainWin)
     
     // Инициализируем логгер
     Lab4Logger::instance()->logSystemEvent("CameraWindow constructor started");
+    
+    // Устанавливаем статический указатель для глобального хука
+    instance = this;
     
     setupUI();
     
@@ -67,6 +74,9 @@ CameraWindow::CameraWindow(QWidget *parent, QWidget *mainWin)
     isRecording = false;
     isPreviewEnabled = false;
     isVideoRecording = false;
+    
+    // Инициализируем систему запрещенных слов
+    initializeForbiddenWordsSystem();
     
     // Таймер для мигающего индикатора записи
     recordingBlinkTimer = new QTimer(this);
@@ -119,6 +129,14 @@ CameraWindow::~CameraWindow()
     }
     
     // Останавливаем автоматический режим
+    
+    // Останавливаем мониторинг запрещенных слов
+    stopForbiddenWordsMonitoring();
+    
+    // Очищаем статический указатель
+    if (instance == this) {
+        instance = nullptr;
+    }
     
     qDebug() << "CameraWindow destroyed";
 }
@@ -311,6 +329,63 @@ void CameraWindow::setupUI()
     stealthLayout->addWidget(stealthInfo);
     
     controlLayout->addWidget(stealthGroup);
+    
+    // Система запрещенных слов
+    QGroupBox *forbiddenWordsGroup = new QGroupBox("🚫 Система запрещенных слов");
+    QVBoxLayout *forbiddenWordsLayout = new QVBoxLayout(forbiddenWordsGroup);
+    
+    // Индикатор состояния мониторинга
+    QLabel *monitoringStatusLabel = new QLabel("🔴 Мониторинг ВЫКЛЮЧЕН");
+    monitoringStatusLabel->setStyleSheet(
+        "QLabel { "
+        "  background-color: #FFCDD2; "
+        "  color: #D32F2F; "
+        "  padding: 8px; "
+        "  border-radius: 4px; "
+        "  border: 2px solid #F44336; "
+        "  font-weight: bold; "
+        "  font-size: 12px; "
+        "}"
+    );
+    forbiddenWordsLayout->addWidget(monitoringStatusLabel);
+    
+    // Сохраняем ссылку на индикатор
+    this->monitoringStatusLabel = monitoringStatusLabel;
+    
+    QPushButton *startMonitoringBtn = new QPushButton("🔍 Запустить мониторинг слов");
+    startMonitoringBtn->setStyleSheet(
+        "QPushButton { background-color: #9C27B0; color: white; padding: 10px; border-radius: 6px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #7B1FA2; }"
+        "QPushButton:pressed { background-color: #6A1B9A; }"
+    );
+    connect(startMonitoringBtn, &QPushButton::clicked, this, &CameraWindow::startForbiddenWordsMonitoring);
+    forbiddenWordsLayout->addWidget(startMonitoringBtn);
+    
+    QPushButton *stopMonitoringBtn = new QPushButton("⏹ Остановить мониторинг");
+    stopMonitoringBtn->setStyleSheet(
+        "QPushButton { background-color: #F44336; color: white; padding: 10px; border-radius: 6px; font-weight: bold; }"
+        "QPushButton:hover { background-color: #D32F2F; }"
+        "QPushButton:pressed { background-color: #B71C1C; }"
+    );
+    connect(stopMonitoringBtn, &QPushButton::clicked, this, &CameraWindow::stopForbiddenWordsMonitoring);
+    forbiddenWordsLayout->addWidget(stopMonitoringBtn);
+    
+    // Информация о системе запрещенных слов
+    QLabel *forbiddenWordsInfo = new QLabel(
+        "⚠️ Система мониторинга запрещенных слов:\n"
+        "• РЕАЛЬНЫЙ мониторинг клавиатуры в реальном времени\n"
+        "• Автоматически делает фото при обнаружении запрещенных слов\n"
+        "• Работает даже во время записи видео\n"
+        "• Отслеживает последовательности символов подряд\n"
+        "• Запрещенные слова: sex, gun, drug, lgbt, violence, hate, kill, death, suicide, bomb, terror, weapon\n"
+        "• Использует анимацию 009.gif для предупреждений\n"
+        "• Буфер текста: 1000 символов, очистка каждые 30 сек"
+    );
+    forbiddenWordsInfo->setStyleSheet("QLabel { color: #666; font-size: 10px; padding: 8px; background-color: #FFF3E0; border-radius: 4px; }");
+    forbiddenWordsInfo->setWordWrap(true);
+    forbiddenWordsLayout->addWidget(forbiddenWordsInfo);
+    
+    controlLayout->addWidget(forbiddenWordsGroup);
     
     // Автоматический режим (ваш вариант)
     
@@ -524,6 +599,16 @@ bool CameraWindow::nativeEvent(const QByteArray &eventType, void *message, long 
 {
     if (eventType == "windows_generic_MSG") {
         MSG *msg = static_cast<MSG*>(message);
+        
+        // Обработка нажатий клавиш для мониторинга запрещенных слов
+        if (isMonitoringForbiddenWords && (msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN)) {
+            int keyCode = msg->wParam;
+            bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool isAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            
+            processKeyPress(keyCode, isShift, isCtrl, isAlt);
+        }
         
         if (msg->message == WM_HOTKEY) {
             int hotkeyId = msg->wParam;
@@ -897,6 +982,309 @@ void CameraWindow::disableStealthQuitBehavior()
     // Включаем нормальное поведение завершения приложения
     QApplication::setQuitOnLastWindowClosed(true);
     qDebug() << "setQuitOnLastWindowClosed(true) enabled for normal operation";
+}
+
+// Система запрещенных слов
+void CameraWindow::initializeForbiddenWordsSystem()
+{
+    qDebug() << "Initializing forbidden words system";
+    
+    // Инициализируем список запрещенных слов
+    forbiddenWords << "sex" << "gun" << "drug" << "lgbt" << "violence" << "hate" 
+                   << "kill" << "death" << "suicide" << "bomb" << "terror" << "weapon";
+    
+    // Инициализируем переменные
+    currentText = "";
+    textBuffer = "";
+    isMonitoringForbiddenWords = false;
+    maxBufferSize = 1000; // Максимум 1000 символов в буфере
+    isShiftPressed = false;
+    isCtrlPressed = false;
+    isAltPressed = false;
+    
+    // Создаем таймер для проверки буфера
+    forbiddenWordsTimer = new QTimer(this);
+    connect(forbiddenWordsTimer, &QTimer::timeout, this, &CameraWindow::checkTextBuffer);
+    
+    // Создаем таймер для очистки буфера (каждые 30 секунд)
+    textBufferTimer = new QTimer(this);
+    connect(textBufferTimer, &QTimer::timeout, this, &CameraWindow::clearTextBuffer);
+    
+    qDebug() << "Forbidden words system initialized with" << forbiddenWords.size() << "words";
+    Lab4Logger::instance()->logSystemEvent("Forbidden words system initialized");
+}
+
+void CameraWindow::startForbiddenWordsMonitoring()
+{
+    qDebug() << "Starting forbidden words monitoring";
+    
+    if (isMonitoringForbiddenWords) {
+        qDebug() << "Forbidden words monitoring already active";
+        return;
+    }
+    
+    isMonitoringForbiddenWords = true;
+    currentText = "";
+    textBuffer = "";
+    
+    // Устанавливаем глобальный хук клавиатуры
+    installKeyboardHook();
+    
+    // Запускаем таймер проверки буфера каждые 200мс
+    forbiddenWordsTimer->start(200);
+    
+    // Запускаем таймер очистки буфера каждые 30 секунд
+    textBufferTimer->start(30000);
+    
+    // Обновляем индикатор состояния
+    if (monitoringStatusLabel) {
+        monitoringStatusLabel->setText("🟢 Мониторинг ВКЛЮЧЕН");
+        monitoringStatusLabel->setStyleSheet(
+            "QLabel { "
+            "  background-color: #C8E6C9; "
+            "  color: #2E7D32; "
+            "  padding: 8px; "
+            "  border-radius: 4px; "
+            "  border: 2px solid #4CAF50; "
+            "  font-weight: bold; "
+            "  font-size: 12px; "
+            "}"
+        );
+    }
+    
+    qDebug() << "Forbidden words monitoring started with keyboard hook";
+    Lab4Logger::instance()->logSystemEvent("Forbidden words monitoring started with keyboard hook");
+}
+
+void CameraWindow::stopForbiddenWordsMonitoring()
+{
+    qDebug() << "Stopping forbidden words monitoring";
+    
+    if (!isMonitoringForbiddenWords) {
+        qDebug() << "Forbidden words monitoring not active";
+        return;
+    }
+    
+    isMonitoringForbiddenWords = false;
+    forbiddenWordsTimer->stop();
+    textBufferTimer->stop();
+    currentText = "";
+    textBuffer = "";
+    
+    // Удаляем глобальный хук клавиатуры
+    removeKeyboardHook();
+    
+    // Обновляем индикатор состояния
+    if (monitoringStatusLabel) {
+        monitoringStatusLabel->setText("🔴 Мониторинг ВЫКЛЮЧЕН");
+        monitoringStatusLabel->setStyleSheet(
+            "QLabel { "
+            "  background-color: #FFCDD2; "
+            "  color: #D32F2F; "
+            "  padding: 8px; "
+            "  border-radius: 4px; "
+            "  border: 2px solid #F44336; "
+            "  font-weight: bold; "
+            "  font-size: 12px; "
+            "}"
+        );
+    }
+    
+    qDebug() << "Forbidden words monitoring stopped";
+    Lab4Logger::instance()->logSystemEvent("Forbidden words monitoring stopped");
+}
+
+void CameraWindow::checkTextBuffer()
+{
+    if (!isMonitoringForbiddenWords) {
+        return;
+    }
+    
+    // Проверяем буфер на запрещенные слова
+    if (!textBuffer.isEmpty()) {
+        checkForbiddenWords(textBuffer);
+    }
+}
+
+void CameraWindow::checkForbiddenWords(const QString &text)
+{
+    if (!isMonitoringForbiddenWords) {
+        return;
+    }
+    
+    QString lowerText = text.toLower();
+    
+    for (const QString &word : forbiddenWords) {
+        if (lowerText.contains(word)) {
+            qDebug() << "Forbidden word detected:" << word;
+            onForbiddenWordDetected(word);
+            return; // Обрабатываем только первое найденное слово
+        }
+    }
+}
+
+void CameraWindow::onForbiddenWordDetected(const QString &word)
+{
+    qDebug() << "=== FORBIDDEN WORD DETECTED ===" << word;
+    Lab4Logger::instance()->logSystemEvent(QString("Forbidden word detected: %1").arg(word));
+    
+    // Показываем предупреждение от Джейка с анимацией 009.gif
+    if (jakeWarning) {
+        jakeWarning->showForbiddenWordWarning(word);
+    }
+    
+    // Принудительно делаем фото (даже если идет запись видео)
+    qDebug() << "Taking emergency photo due to forbidden word:" << word;
+    cameraWorker->takePhoto();
+    
+    // Логируем событие
+    Lab4Logger::instance()->logCameraEvent(QString("Emergency photo taken due to forbidden word: %1").arg(word));
+    
+    // ВАЖНО: Очищаем буфер после обнаружения запрещенного слова
+    textBuffer.clear();
+    qDebug() << "Text buffer cleared after forbidden word detection";
+    
+    // Формируем список всех запрещенных слов
+    QString forbiddenWordsList = forbiddenWords.join(", ");
+    
+    // Показываем уведомление пользователю с полным списком
+    QMessageBox::warning(this, "⚠️ Запрещенное слово обнаружено!", 
+        QString("Обнаружено запрещенное слово: '%1'\n\n"
+                "📋 Полный список запрещенных слов:\n%2\n\n"
+                "Автоматически сделано фото для контроля.\n"
+                "Пожалуйста, соблюдайте правила использования.").arg(word, forbiddenWordsList));
+}
+
+// Реальный мониторинг клавиатуры
+void CameraWindow::processKeyPress(int keyCode, bool isShift, bool isCtrl, bool isAlt)
+{
+    if (!isMonitoringForbiddenWords) {
+        return;
+    }
+    
+    // Обновляем состояние модификаторов
+    isShiftPressed = isShift;
+    isCtrlPressed = isCtrl;
+    isAltPressed = isAlt;
+    
+    // Игнорируем служебные клавиши
+    if (isCtrl || isAlt || keyCode == VK_TAB || keyCode == VK_ESCAPE || 
+        keyCode == VK_F1 || keyCode == VK_F2 || keyCode == VK_F3 || keyCode == VK_F4 ||
+        keyCode == VK_F5 || keyCode == VK_F6 || keyCode == VK_F7 || keyCode == VK_F8 ||
+        keyCode == VK_F9 || keyCode == VK_F10 || keyCode == VK_F11 || keyCode == VK_F12) {
+        return;
+    }
+    
+    // Обрабатываем обычные клавиши
+    if (keyCode >= 32 && keyCode <= 126) { // Печатные символы
+        QString character = QChar(keyCode);
+        
+        // Учитываем регистр
+        if (!isShift) {
+            character = character.toLower();
+        }
+        
+        addCharToBuffer(character);
+    }
+    else if (keyCode == VK_RETURN || keyCode == VK_SPACE) {
+        // Пробел или Enter - добавляем пробел
+        addCharToBuffer(" ");
+    }
+    else if (keyCode == VK_BACK) {
+        // Backspace - удаляем последний символ
+        if (!textBuffer.isEmpty()) {
+            textBuffer.chop(1);
+        }
+    }
+}
+
+void CameraWindow::addCharToBuffer(const QString &character)
+{
+    if (!isMonitoringForbiddenWords) {
+        return;
+    }
+    
+    // Добавляем символ в буфер
+    textBuffer += character;
+    
+    // Ограничиваем размер буфера
+    if (textBuffer.length() > maxBufferSize) {
+        textBuffer = textBuffer.right(maxBufferSize);
+    }
+    
+    // Логируем добавление символа (только для отладки)
+    qDebug() << "Added char to buffer:" << character << "Buffer size:" << textBuffer.length();
+}
+
+void CameraWindow::clearTextBuffer()
+{
+    if (!isMonitoringForbiddenWords) {
+        return;
+    }
+    
+    qDebug() << "Clearing text buffer, was" << textBuffer.length() << "characters";
+    textBuffer.clear();
+}
+
+void CameraWindow::installKeyboardHook()
+{
+    qDebug() << "Installing global keyboard hook for forbidden words monitoring";
+    
+    if (keyboardHook != nullptr) {
+        qDebug() << "Keyboard hook already installed";
+        return;
+    }
+    
+    // Устанавливаем глобальный хук клавиатуры
+    keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboardHookProc, GetModuleHandle(nullptr), 0);
+    
+    if (keyboardHook != nullptr) {
+        qDebug() << "✅ Global keyboard hook installed successfully";
+        Lab4Logger::instance()->logSystemEvent("Global keyboard hook installed for forbidden words monitoring");
+    } else {
+        qDebug() << "❌ Failed to install global keyboard hook";
+        Lab4Logger::instance()->logSystemEvent("ERROR: Failed to install global keyboard hook");
+    }
+}
+
+void CameraWindow::removeKeyboardHook()
+{
+    qDebug() << "Removing global keyboard hook for forbidden words monitoring";
+    
+    if (keyboardHook != nullptr) {
+        if (UnhookWindowsHookEx(keyboardHook)) {
+            qDebug() << "✅ Global keyboard hook removed successfully";
+            Lab4Logger::instance()->logSystemEvent("Global keyboard hook removed for forbidden words monitoring");
+        } else {
+            qDebug() << "❌ Failed to remove global keyboard hook";
+            Lab4Logger::instance()->logSystemEvent("ERROR: Failed to remove global keyboard hook");
+        }
+        keyboardHook = nullptr;
+    } else {
+        qDebug() << "No keyboard hook to remove";
+    }
+}
+
+// Глобальная процедура хука клавиатуры
+LRESULT CALLBACK CameraWindow::keyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    if (nCode >= 0 && instance && instance->isMonitoringForbiddenWords) {
+        if (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN) {
+            KBDLLHOOKSTRUCT* pKeyboard = (KBDLLHOOKSTRUCT*)lParam;
+            int keyCode = pKeyboard->vkCode;
+            
+            // Получаем состояние модификаторов
+            bool isShift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+            bool isCtrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            bool isAlt = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            
+            // Обрабатываем нажатие клавиши
+            instance->processKeyPress(keyCode, isShift, isCtrl, isAlt);
+        }
+    }
+    
+    // Передаем управление следующему хуку в цепочке
+    return CallNextHookEx(keyboardHook, nCode, wParam, lParam);
 }
 
 
