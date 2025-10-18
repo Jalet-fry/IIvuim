@@ -25,10 +25,9 @@ int main(int argc, char *argv[])
     QApplication a(argc, argv);
     logToFile("QApplication created");
     
-    // ВАЖНО: Отключаем автоматическое завершение приложения при закрытии всех окон
-    // Это необходимо для работы скрытого режима в Qt 5.5.1
-    a.setQuitOnLastWindowClosed(false);
-    logToFile("QuitOnLastWindowClosed set to false for stealth mode support");
+    // НЕ устанавливаем setQuitOnLastWindowClosed(false) глобально
+    // Это будет управляться динамически в CameraWindow
+    logToFile("QuitOnLastWindowClosed will be managed dynamically");
 
     MainWindow w;
     logToFile("MainWindow created");

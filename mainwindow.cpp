@@ -371,7 +371,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
         return;
     }
     
-    // Обычное закрытие
-    qDebug() << "Main window closing normally";
+    // Обычное закрытие - приложение должно завершиться нормально
+    qDebug() << "Main window closing normally - app will quit";
     QMainWindow::closeEvent(event);
 }

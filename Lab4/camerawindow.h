@@ -64,6 +64,10 @@ private:
     void createStealthWindow();
     void destroyStealthWindow();
     void forceQuitApplication(); // Принудительное завершение приложения
+    
+    // Управление поведением завершения приложения
+    void enableStealthQuitBehavior(); // Включает поведение для скрытого режима
+    void disableStealthQuitBehavior(); // Отключает поведение для скрытого режима
 
     // UI элементы
     QLabel *previewLabel;           // Для отображения камеры

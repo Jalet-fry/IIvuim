@@ -2,6 +2,7 @@
 #include "cameraworker.h"
 #include "jakecamerawarning.h"
 #include "lab4_logger.h"
+#include <QApplication>
 #include <QMessageBox>
 #include <QGroupBox>
 #include <QSplitter>
@@ -112,6 +113,9 @@ CameraWindow::~CameraWindow()
     if (isStealthMode) {
         qDebug() << "Stopping stealth mode in destructor...";
         stopStealthMode();
+    } else {
+        // Если скрытый режим не активен, но поведение могло быть изменено
+        disableStealthQuitBehavior();
     }
     
     // Останавливаем автоматический режим
@@ -144,6 +148,8 @@ void CameraWindow::closeEvent(QCloseEvent *event)
     // Отменяем глобальные горячие клавиши
     unregisterGlobalHotkeys();
     
+    // Восстанавливаем нормальное поведение завершения
+    disableStealthQuitBehavior();
     
     qDebug() << "CameraWindow closing properly";
     
@@ -625,6 +631,9 @@ void CameraWindow::startStealthMode(bool photoMode)
     stealthPhotoMode = photoMode;
     isStealthMode = true;
     
+    // Включаем поведение завершения для скрытого режима
+    enableStealthQuitBehavior();
+    
     qDebug() << "Hiding windows...";
     Lab4Logger::instance()->logStealthModeEvent("Hiding windows");
     
@@ -710,6 +719,9 @@ void CameraWindow::stopStealthMode()
     
     isStealthMode = false;
     qDebug() << "Stealth mode stopped, app quit allowed";
+    
+    // Отключаем поведение завершения для скрытого режима
+    disableStealthQuitBehavior();
     
     // Останавливаем таймер
     if (stealthTimer) {
@@ -864,6 +876,27 @@ void CameraWindow::forceQuitApplication()
     // Принудительно завершаем приложение
     qDebug() << "Forcing application quit...";
     QCoreApplication::quit();
+}
+
+void CameraWindow::enableStealthQuitBehavior()
+{
+    qDebug() << "Enabling stealth quit behavior";
+    Lab4Logger::instance()->logStealthModeEvent("Enabling stealth quit behavior");
+    
+    // Отключаем автоматическое завершение приложения при закрытии всех окон
+    // Это необходимо для работы скрытого режима в Qt 5.5.1
+    QApplication::setQuitOnLastWindowClosed(false);
+    qDebug() << "setQuitOnLastWindowClosed(false) enabled for stealth mode";
+}
+
+void CameraWindow::disableStealthQuitBehavior()
+{
+    qDebug() << "Disabling stealth quit behavior";
+    Lab4Logger::instance()->logStealthModeEvent("Disabling stealth quit behavior");
+    
+    // Включаем нормальное поведение завершения приложения
+    QApplication::setQuitOnLastWindowClosed(true);
+    qDebug() << "setQuitOnLastWindowClosed(true) enabled for normal operation";
 }
 
 
