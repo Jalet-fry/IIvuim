@@ -5,6 +5,7 @@
 #include "Lab5/usbwindow.h"
 #include "Lab6/bluetoothwindow.h"
 #include "Animation/jakewidget.h"
+#include <QApplication>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -141,6 +142,9 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Создаем Джейка после инициализации UI
     setupJake();
+    
+    // Невидимое окно-заглушка будет поддерживать работу приложения
+    // connect(qApp, &QApplication::lastWindowClosed, this, &MainWindow::onLastWindowClosed); // Больше не нужно
 }
 
 MainWindow::~MainWindow()
@@ -221,7 +225,7 @@ void MainWindow::openLab3() {
 }
 
 void MainWindow::openLab4() {
-    CameraWindow *cameraWin = new CameraWindow(nullptr);
+    CameraWindow *cameraWin = new CameraWindow(nullptr, this);
     cameraWin->show();
     
     if (jakeWidget) {
@@ -349,4 +353,25 @@ void MainWindow::scanBackgroundImages() {
     if (backgroundImages.isEmpty()) {
         qDebug() << "В папке backgrounds нет изображений - фон отключен";
     }
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    qDebug() << "=== MAIN WINDOW CLOSE EVENT ===";
+    
+    // Проверяем, есть ли активный скрытый режим
+    if (cameraWindow && cameraWindow->getIsStealthMode()) {
+        qDebug() << "Stealth mode is active - preventing app quit";
+        
+        // Скрываем главное окно, но не завершаем приложение
+        this->hide();
+        event->ignore(); // Игнорируем закрытие
+        
+        qDebug() << "Main window hidden, app continues running in stealth mode";
+        return;
+    }
+    
+    // Обычное закрытие
+    qDebug() << "Main window closing normally";
+    QMainWindow::closeEvent(event);
 }

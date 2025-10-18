@@ -21,8 +21,11 @@ class CameraWindow : public QWidget
     Q_OBJECT
 
 public:
-    explicit CameraWindow(QWidget *parent = nullptr);
+    explicit CameraWindow(QWidget *parent = nullptr, QWidget *mainWin = nullptr);
     ~CameraWindow();
+    
+    // Геттер для проверки скрытого режима
+    bool getIsStealthMode() const { return isStealthMode; }
     
 protected:
     // Для обработки глобальных горячих клавиш Windows
@@ -52,6 +55,15 @@ private:
     void setupHotkeys();
     void registerGlobalHotkeys();
     void unregisterGlobalHotkeys();
+    
+    // Скрытый режим
+    void startStealthMode(bool photoMode);
+    void stopStealthMode();
+    void onStealthTimer();
+    void showStealthWarning();
+    void createStealthWindow();
+    void destroyStealthWindow();
+    void forceQuitApplication(); // Принудительное завершение приложения
 
     // UI элементы
     QLabel *previewLabel;           // Для отображения камеры
@@ -86,8 +98,16 @@ private:
     static constexpr int HOTKEY_STOP_RECORDING = 2;
     static constexpr int HOTKEY_TAKE_PHOTO = 3;
     static constexpr int HOTKEY_SHOW_WINDOW = 4;
+    static constexpr int HOTKEY_STOP_STEALTH = 5;
+    static constexpr int HOTKEY_FORCE_QUIT = 6;
     bool globalHotkeysRegistered;
     
+    // Скрытый режим
+    bool isStealthMode;
+    bool stealthPhotoMode; // true = фото, false = видео
+    QTimer *stealthTimer;
+    QWidget *mainWindow; // Ссылка на главное окно для скрытия
+    QWidget *stealthWindow; // Невидимое окно-заглушка для поддержки работы приложения
     
     // Состояние автоматического режима
 };

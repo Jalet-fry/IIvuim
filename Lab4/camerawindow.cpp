@@ -13,15 +13,21 @@
 #include <QFile>
 #include <QTextStream>
 #include <QDir>
+#include <QRadioButton>
 #include <windows.h>
 
-CameraWindow::CameraWindow(QWidget *parent)
+CameraWindow::CameraWindow(QWidget *parent, QWidget *mainWin)
     : QWidget(parent),
       cameraWorker(nullptr),
       isRecording(false),
       isPreviewEnabled(true),
       recordingIndicatorVisible(false),
-      globalHotkeysRegistered(false)
+      globalHotkeysRegistered(false),
+      isStealthMode(false),
+      stealthPhotoMode(true),
+      stealthTimer(nullptr),
+      mainWindow(mainWin),
+      stealthWindow(nullptr)
 {
     setWindowTitle("ЛР 4: Работа с веб-камерой (DirectShow API)");
     resize(1000, 700);
@@ -102,6 +108,11 @@ CameraWindow::~CameraWindow()
         cameraWorker = nullptr;
     }
     
+    // Останавливаем скрытый режим
+    if (isStealthMode) {
+        qDebug() << "Stopping stealth mode in destructor...";
+        stopStealthMode();
+    }
     
     // Останавливаем автоматический режим
     
@@ -110,7 +121,8 @@ CameraWindow::~CameraWindow()
 
 void CameraWindow::closeEvent(QCloseEvent *event)
 {
-    qDebug() << "CameraWindow closeEvent called";
+    qDebug() << "=== CAMERA WINDOW CLOSE EVENT ===";
+    Lab4Logger::instance()->logStealthModeEvent("CameraWindow closeEvent called");
     
     // Останавливаем запись если идет
     if (isRecording || isVideoRecording) {
@@ -242,6 +254,57 @@ void CameraWindow::setupUI()
     
     controlLayout->addWidget(controlGroup);
     
+    // Скрытый режим
+    QGroupBox *stealthGroup = new QGroupBox("🕵️ Скрытый режим");
+    QVBoxLayout *stealthLayout = new QVBoxLayout(stealthGroup);
+    
+    // Выбор режима скрытого наблюдения
+    QHBoxLayout *modeLayout = new QHBoxLayout();
+    
+    QRadioButton *photoModeRadio = new QRadioButton("📸 Скрытое фото");
+    photoModeRadio->setChecked(true);
+    photoModeRadio->setStyleSheet("QRadioButton { font-weight: bold; }");
+    
+    QRadioButton *videoModeRadio = new QRadioButton("🎥 Скрытое видео");
+    videoModeRadio->setStyleSheet("QRadioButton { font-weight: bold; }");
+    
+    modeLayout->addWidget(photoModeRadio);
+    modeLayout->addWidget(videoModeRadio);
+    modeLayout->addStretch();
+    
+    stealthLayout->addLayout(modeLayout);
+    
+    // Кнопка запуска скрытого режима
+    QPushButton *startStealthBtn = new QPushButton("🚀 Запустить скрытый режим");
+    startStealthBtn->setStyleSheet(
+        "QPushButton { background-color: #E91E63; color: white; padding: 12px; border-radius: 6px; font-weight: bold; font-size: 14px; }"
+        "QPushButton:hover { background-color: #C2185B; }"
+        "QPushButton:pressed { background-color: #AD1457; }"
+    );
+    
+    connect(startStealthBtn, &QPushButton::clicked, this, [this, photoModeRadio, videoModeRadio]() {
+        bool isPhotoMode = photoModeRadio->isChecked();
+        startStealthMode(isPhotoMode);
+    });
+    
+    stealthLayout->addWidget(startStealthBtn);
+    
+    // Информация о скрытом режиме
+    QLabel *stealthInfo = new QLabel(
+        "⚠️ Скрытый режим:\n"
+        "• Полностью скрывает все окна приложения\n"
+        "• Работает в фоновом режиме\n"
+        "• Горячие клавиши:\n"
+        "  - Ctrl+Shift+Q: Показать окна\n"
+        "  - Ctrl+Shift+E: Остановить режим\n"
+        "  - Ctrl+Shift+X: Принудительное завершение\n\n"
+        "⚠️ ВНИМАНИЕ: Используйте только в образовательных целях!"
+    );
+    stealthInfo->setStyleSheet("QLabel { color: #666; font-size: 11px; padding: 8px; background-color: #FFF3E0; border-radius: 4px; }");
+    stealthInfo->setWordWrap(true);
+    stealthLayout->addWidget(stealthInfo);
+    
+    controlLayout->addWidget(stealthGroup);
     
     // Автоматический режим (ваш вариант)
     
@@ -513,13 +576,294 @@ bool CameraWindow::nativeEvent(const QByteArray &eventType, void *message, long 
                     this->show();
                     this->raise();
                     this->activateWindow();
+                    
+                    if (mainWindow) {
+                        mainWindow->show();
+                        mainWindow->raise();
+                        mainWindow->activateWindow();
+                    }
+                    
+                    // Если в скрытом режиме, останавливаем его
+                    if (isStealthMode) {
+                        stopStealthMode();
+                    }
+                    
                     statusLabel->setText("Статус: Окно восстановлено");
+                    return true;
+                    
+                case HOTKEY_STOP_STEALTH:
+                    qDebug() << "Ctrl+Shift+E - остановить скрытый режим";
+                    if (isStealthMode) {
+                        stopStealthMode();
+                    }
+                    return true;
+                    
+                case HOTKEY_FORCE_QUIT:
+                    qDebug() << "Ctrl+Shift+X - принудительное завершение приложения";
+                    forceQuitApplication();
                     return true;
             }
         }
     }
     
     return QWidget::nativeEvent(eventType, message, result);
+}
+
+// Методы скрытого режима
+void CameraWindow::startStealthMode(bool photoMode)
+{
+    qDebug() << "=== START STEALTH MODE ===";
+    Lab4Logger::instance()->logStealthModeEvent("Starting stealth mode");
+    
+    if (isStealthMode) {
+        qDebug() << "Stealth mode already active!";
+        QMessageBox::information(this, "Скрытый режим", "Скрытый режим уже активен!");
+        return;
+    }
+    
+    qDebug() << "Setting stealth mode parameters...";
+    stealthPhotoMode = photoMode;
+    isStealthMode = true;
+    
+    qDebug() << "Hiding windows...";
+    Lab4Logger::instance()->logStealthModeEvent("Hiding windows");
+    
+    // Создаем невидимое окно-заглушку для поддержки работы приложения
+    qDebug() << "Creating stealth window...";
+    createStealthWindow();
+    
+    // Проверяем, что невидимое окно действительно создано и видимо
+    if (stealthWindow && stealthWindow->isVisible()) {
+        qDebug() << "Stealth window successfully created and visible";
+        Lab4Logger::instance()->logStealthModeEvent("Stealth window created successfully");
+    } else {
+        qDebug() << "ERROR: Stealth window not created or not visible!";
+        qDebug() << "Stealth window pointer:" << stealthWindow;
+        if (stealthWindow) {
+            qDebug() << "Stealth window visible:" << stealthWindow->isVisible();
+        }
+        Lab4Logger::instance()->logStealthModeEvent("ERROR: Stealth window creation failed");
+        
+        // Если не удалось создать окно-заглушку, отменяем скрытый режим
+        isStealthMode = false;
+        QMessageBox::critical(this, "Ошибка", "Не удалось создать невидимое окно-заглушку!\nСкрытый режим отменен.");
+        return;
+    }
+    
+    // Скрываем все окна
+    this->hide();
+    if (mainWindow) {
+        mainWindow->hide();
+        qDebug() << "Main window hidden";
+    }
+    qDebug() << "Camera window hidden";
+    
+    // Регистрируем дополнительные горячие клавиши для скрытого режима
+    qDebug() << "Registering stealth hotkeys...";
+    RegisterHotKey((HWND)this->winId(), HOTKEY_SHOW_WINDOW, MOD_CONTROL | MOD_SHIFT, 'Q');
+    RegisterHotKey((HWND)this->winId(), HOTKEY_STOP_STEALTH, MOD_CONTROL | MOD_SHIFT, 'E');
+    RegisterHotKey((HWND)this->winId(), HOTKEY_FORCE_QUIT, MOD_CONTROL | MOD_SHIFT, 'X');
+    qDebug() << "Stealth hotkeys registered";
+    
+    // Создаем таймер для периодического захвата
+    qDebug() << "Creating stealth timer...";
+    stealthTimer = new QTimer(this);
+    connect(stealthTimer, &QTimer::timeout, this, &CameraWindow::onStealthTimer);
+    
+    // Запускаем таймер (каждые 5 секунд)
+    stealthTimer->start(5000);
+    qDebug() << "Stealth timer started (5 seconds interval)";
+    
+    // Показываем предупреждение от Джейка
+    qDebug() << "Showing stealth warning...";
+    showStealthWarning();
+    
+    statusLabel->setText(QString("Статус: 🕵️ Скрытый режим активен (%1)").arg(photoMode ? "фото" : "видео"));
+    
+    Lab4Logger::instance()->logStealthDaemonEvent(QString("Stealth mode started: %1").arg(photoMode ? "photo" : "video"));
+    
+    qDebug() << "Showing stealth mode information dialog...";
+    QMessageBox::information(this, "Скрытый режим", 
+        QString("🕵️ Скрытый режим запущен!\n\n"
+               "Режим: %1\n"
+               "• Все окна скрыты\n"
+               "• Захват каждые 5 секунд\n"
+               "• Горячие клавиши:\n"
+               "  - Ctrl+Shift+Q: Показать окна\n"
+               "  - Ctrl+Shift+E: Остановить режим\n\n"
+               "⚠️ ВНИМАНИЕ: Используйте только в образовательных целях!")
+        .arg(photoMode ? "Скрытое фото" : "Скрытое видео"));
+    
+    qDebug() << "=== STEALTH MODE STARTED SUCCESSFULLY ===";
+    Lab4Logger::instance()->logStealthModeEvent("Stealth mode started successfully");
+}
+
+void CameraWindow::stopStealthMode()
+{
+    qDebug() << "=== STOP STEALTH MODE ===";
+    Lab4Logger::instance()->logStealthModeEvent("Stopping stealth mode");
+    
+    if (!isStealthMode) {
+        qDebug() << "Stealth mode not active, nothing to stop";
+        return;
+    }
+    
+    isStealthMode = false;
+    qDebug() << "Stealth mode stopped, app quit allowed";
+    
+    // Останавливаем таймер
+    if (stealthTimer) {
+        stealthTimer->stop();
+        stealthTimer->deleteLater();
+        stealthTimer = nullptr;
+    }
+    
+    // Отменяем регистрацию горячих клавиш скрытого режима
+    UnregisterHotKey((HWND)this->winId(), HOTKEY_SHOW_WINDOW);
+    UnregisterHotKey((HWND)this->winId(), HOTKEY_STOP_STEALTH);
+    UnregisterHotKey((HWND)this->winId(), HOTKEY_FORCE_QUIT);
+    
+    // Уничтожаем невидимое окно-заглушку
+    qDebug() << "Destroying stealth window...";
+    destroyStealthWindow();
+    
+    // Показываем окна
+    this->show();
+    this->raise();
+    this->activateWindow();
+    
+    if (mainWindow) {
+        mainWindow->show();
+        mainWindow->raise();
+        mainWindow->activateWindow();
+    }
+    
+    statusLabel->setText("Статус: Скрытый режим остановлен");
+    
+    Lab4Logger::instance()->logStealthDaemonEvent("Stealth mode stopped");
+    
+    QMessageBox::information(this, "Скрытый режим", "Скрытый режим остановлен!");
+}
+
+void CameraWindow::onStealthTimer()
+{
+    if (!isStealthMode) {
+        return;
+    }
+    
+    if (stealthPhotoMode) {
+        // Скрытое фото
+        statusLabel->setText("Статус: 🕵️ Скрытое фото...");
+        cameraWorker->takePhoto();
+        
+        // Показываем предупреждение от Джейка
+        showStealthWarning();
+        
+        Lab4Logger::instance()->logStealthDaemonEvent("Stealth photo taken");
+    } else {
+        // Скрытое видео (короткое - 3 секунды)
+        if (!isRecording) {
+            statusLabel->setText("Статус: 🕵️ Скрытое видео...");
+            cameraWorker->startVideoRecording();
+            
+            // Показываем предупреждение от Джейка
+            showStealthWarning();
+            
+            // Останавливаем запись через 3 секунды
+            QTimer::singleShot(3000, this, [this]() {
+                if (isRecording) {
+                    cameraWorker->stopVideoRecording();
+                }
+            });
+            
+            Lab4Logger::instance()->logStealthDaemonEvent("Stealth video recorded");
+        }
+    }
+}
+
+void CameraWindow::showStealthWarning()
+{
+    if (jakeWarning) {
+        // Показываем предупреждение от Джейка о скрытом наблюдении
+        jakeWarning->showWarning(JakeCameraWarning::STEALTH_MODE);
+    }
+}
+
+void CameraWindow::createStealthWindow()
+{
+    qDebug() << "Creating stealth window...";
+    
+    // Создаем невидимое окно-заглушку с правильными флагами для Qt 5.5.1
+    stealthWindow = new QWidget();
+    
+    // Устанавливаем флаги окна для невидимости, но поддержки работы приложения
+    stealthWindow->setWindowFlags(
+        Qt::Tool | 
+        Qt::FramelessWindowHint | 
+        Qt::WindowStaysOnTopHint |
+        Qt::WindowDoesNotAcceptFocus
+    );
+    
+    // Делаем окно полностью прозрачным
+    stealthWindow->setAttribute(Qt::WA_TranslucentBackground, true);
+    stealthWindow->setAttribute(Qt::WA_NoSystemBackground, true);
+    stealthWindow->setAttribute(Qt::WA_ShowWithoutActivating, true);
+    
+    // Минимальный размер и позиция за экраном
+    stealthWindow->setFixedSize(1, 1);
+    stealthWindow->move(-1000, -1000);
+    stealthWindow->setWindowTitle("Stealth Window");
+    
+    // КРИТИЧЕСКИ ВАЖНО: Делаем окно видимым для Qt, но невидимым для пользователя
+    stealthWindow->setVisible(true);
+    stealthWindow->show();
+    
+    // Дополнительно убеждаемся, что окно остается активным
+    stealthWindow->raise();
+    
+    qDebug() << "Stealth window created and shown";
+    qDebug() << "Stealth window is visible:" << stealthWindow->isVisible();
+    qDebug() << "Stealth window geometry:" << stealthWindow->geometry();
+    qDebug() << "Stealth window windowFlags:" << stealthWindow->windowFlags();
+}
+
+void CameraWindow::destroyStealthWindow()
+{
+    qDebug() << "Destroying stealth window...";
+    
+    if (stealthWindow) {
+        // Сначала скрываем окно
+        stealthWindow->hide();
+        stealthWindow->setVisible(false);
+        
+        // Затем удаляем его
+        stealthWindow->deleteLater();
+        stealthWindow = nullptr;
+        
+        qDebug() << "Stealth window destroyed";
+    } else {
+        qDebug() << "No stealth window to destroy";
+    }
+}
+
+void CameraWindow::forceQuitApplication()
+{
+    qDebug() << "=== FORCE QUIT APPLICATION ===";
+    Lab4Logger::instance()->logStealthModeEvent("Force quit application requested");
+    
+    // Останавливаем скрытый режим
+    if (isStealthMode) {
+        stopStealthMode();
+    }
+    
+    // Останавливаем камеру
+    if (cameraWorker) {
+        cameraWorker->stopAll();
+    }
+    
+    // Принудительно завершаем приложение
+    qDebug() << "Forcing application quit...";
+    QCoreApplication::quit();
 }
 
 
